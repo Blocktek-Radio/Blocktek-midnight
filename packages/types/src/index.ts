@@ -44,11 +44,56 @@ export const generatedProgrammeSchema = programmeRequestSchema.extend({
 })
 export type GeneratedProgramme = z.infer<typeof generatedProgrammeSchema>
 
+export const radioStatuses = ["LIVE", "CONNECTING", "OFFLINE", "NOT_CONFIGURED"] as const
+export const radioStatusSchema = z.enum(radioStatuses)
+export type RadioStatus = z.infer<typeof radioStatusSchema>
+
+export const dataStatuses = ["REAL", "DEMO", "UNKNOWN", "NOT_CONFIGURED", "OFFLINE"] as const
+export const dataStatusSchema = z.enum(dataStatuses)
+export type DataStatus = z.infer<typeof dataStatusSchema>
+
+export const streamHealthStatuses = ["configured", "reachable", "unreachable", "unknown"] as const
+export const streamHealthSchema = z.enum(streamHealthStatuses)
+export type StreamHealth = z.infer<typeof streamHealthSchema>
+
+export type Artist = {
+  id: string
+  name: string
+}
+
+export type Album = {
+  id: string
+  title: string
+  artworkUrl: string | null
+}
+
+export type Track = {
+  id: string
+  title: string
+  artist: Artist
+  album: Album | null
+  durationSeconds: number
+  artworkUrl: string | null
+  dataStatus: DataStatus
+}
+
+export type Stream = {
+  id: string
+  channelId: string
+  name: string
+  url: string | null
+  enabled: boolean
+  health: StreamHealth
+  checkedAt: string | null
+  dataStatus: DataStatus
+}
+
 export type Station = {
   id: string
   name: string
   description: string
-  status: "online" | "offline" | "not-configured"
+  status: RadioStatus
+  dataStatus: DataStatus
 }
 
 export type Channel = {
@@ -56,24 +101,63 @@ export type Channel = {
   stationId: string
   name: string
   genre: string
-  streamUrl: string | null
+  description: string
+  stream: Stream | null
+  dataStatus: DataStatus
 }
 
-export type NowPlaying = {
+export type PlaylistItem = {
+  position: number
+  track: Track
+}
+
+export type Playlist = {
+  id: string
   channelId: string
-  programmeTitle: string
-  trackTitle: string
-  artist: string
-  startedAt: string
-  durationSeconds: number
-  streamConfigured: boolean
+  name: string
+  description: string
+  items: PlaylistItem[]
+  dataStatus: DataStatus
 }
 
 export type QueueItem = {
   position: number
+  track: Track
+  scheduledAt: string | null
+}
+
+export type ProgrammeStatus = "CURRENT" | "UPCOMING" | "PAST"
+
+export type Programme = {
+  id: string
+  channelId: string
   title: string
-  artist: string
-  durationSeconds: number
+  description: string
+  host: string | null
+  startTime: string
+  endTime: string
+  status: ProgrammeStatus
+  dataStatus: DataStatus
+}
+
+export type Schedule = {
+  id: string
+  programmeId: string
+  channelId: string
+  startTime: string
+  endTime: string
+  programme: Programme
+  dataStatus: DataStatus
+}
+
+export type NowPlaying = {
+  status: RadioStatus
+  channelId: string
+  track: Track | null
+  programme: Programme | null
+  startedAt: string | null
+  stream: Stream | null
+  metadataStatus: DataStatus
 }
 
 export type DisclosureResult = {

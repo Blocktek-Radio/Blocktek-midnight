@@ -17,6 +17,7 @@ COPY app app
 COPY components components
 COPY lib lib
 COPY public public
+COPY packages packages
 COPY next.config.mjs postcss.config.mjs tsconfig.json ./
 RUN pnpm build
 USER node

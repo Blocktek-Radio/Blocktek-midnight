@@ -2,17 +2,22 @@ import cors from "@fastify/cors"
 import Fastify from "fastify"
 import { generateProgramme } from "@blocktek/ai"
 import { eligibilityDisclosure, UnconfiguredMidnightAdapter } from "@blocktek/midnight"
-import { programmeRequestSchema, submissionStateSchema, type SubmissionState } from "@blocktek/types"
+import { createRadioSeed, InMemoryRadioRepository, radioStatusForStream, type RadioRepository } from "@blocktek/radio-core"
+import { programmeRequestSchema, submissionStateSchema, type Channel, type SubmissionState, type Stream } from "@blocktek/types"
 import { z } from "zod"
-import { channels, nowPlaying, queue, stations } from "./data.js"
 import { loadConfig, type ApiConfig } from "./config.js"
 import { transitionSubmission } from "./submission.js"
+import { checkStream, type StreamProbe } from "./stream.js"
 
 const transitionBodySchema = z.object({ to: submissionStateSchema })
 const submissionBodySchema = z.object({
   title: z.string().trim().min(3).max(160),
   body: z.string().trim().min(10).max(20000),
   evidenceAttached: z.boolean().default(false),
+})
+const scheduleQuerySchema = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
 })
 
 type Submission = {
@@ -24,10 +29,36 @@ type Submission = {
   createdAt: string
 }
 
-export function buildServer(config: ApiConfig = loadConfig()) {
+export type ServerDependencies = {
+  radioRepository?: RadioRepository
+  streamProbe?: StreamProbe
+}
+
+export function buildServer(config: ApiConfig = loadConfig(), dependencies: ServerDependencies = {}) {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } })
   const midnight = new UnconfiguredMidnightAdapter()
   const submissions = new Map<string, Submission>()
+  const radioRepository = dependencies.radioRepository || new InMemoryRadioRepository(createRadioSeed({
+    streamUrl: config.RADIO_STREAM_URL || undefined,
+    streamName: config.RADIO_STREAM_NAME,
+    streamEnabled: config.RADIO_STREAM_ENABLED,
+  }))
+  const streamProbe = dependencies.streamProbe
+  const streamCache = new Map<string, { stream: Stream; expiresAt: number }>()
+
+  async function checkedStream(stream: Stream | null): Promise<Stream | null> {
+    if (!stream) return null
+    const cached = streamCache.get(stream.url || "")
+    if (cached && cached.expiresAt > Date.now()) return cached.stream
+    const checked = await checkStream(stream, streamProbe)
+    if (checked) streamCache.set(checked.url || "", { stream: checked, expiresAt: Date.now() + 15_000 })
+    return checked
+  }
+
+  async function checkedChannels(): Promise<Channel[]> {
+    const channels = await radioRepository.getChannels()
+    return Promise.all(channels.map(async (channel) => ({ ...channel, stream: await checkedStream(channel.stream) })))
+  }
 
   app.register(cors, { origin: config.WEB_BASE_URL })
 
@@ -43,31 +74,44 @@ export function buildServer(config: ApiConfig = loadConfig()) {
     status: "ok",
     service: "blocktek-api",
     version: "v1",
-    mode: "development",
+    mode: config.DATABASE_URL ? "production" : "development",
     integrations: {
-      radioStream: Boolean(config.RADIO_STREAM_URL),
+      radioStream: Boolean(config.RADIO_STREAM_ENABLED && config.RADIO_STREAM_URL),
       aiProvider: config.AI_PROVIDER,
       midnight: midnight.status().status,
     },
   }))
 
   app.get("/api/v1/health/ready", async (_request, reply) => {
+    const persistence = await radioRepository.health()
+    const ready = persistence.status !== "unavailable"
     return reply.send({
-      status: "degraded",
-      ready: true,
-      persistence: "not-configured",
-      redis: "not-configured",
+      status: persistence.status === "ready" ? "ok" : "degraded",
+      ready,
+      persistence: persistence.status,
+      redis: "not-required",
       midnight: midnight.status().status,
     })
   })
 
-  app.get("/api/v1/radio/stations", async () => ({ data: stations }))
-  app.get("/api/v1/radio/channels", async () => ({ data: channels }))
-  app.get("/api/v1/radio/now-playing", async () => ({ data: nowPlaying() }))
-  app.get("/api/v1/radio/queue", async () => ({ data: queue }))
-  app.get("/api/v1/radio/programmes", async () => ({
-    data: [{ id: "development-signal", title: "Development Signal", channelId: "signal-01", status: "DEMO" }],
-  }))
+  app.get("/api/v1/radio/stations", async () => {
+    const station = await radioRepository.getStation()
+    const channels = await checkedChannels()
+    return { data: station ? [{ ...station, status: radioStatusForStream(channels[0]?.stream || null) }] : [] }
+  })
+  app.get("/api/v1/radio/channels", async () => ({ data: await checkedChannels() }))
+  app.get("/api/v1/radio/now-playing", async () => {
+    const current = await radioRepository.getNowPlaying()
+    const channels = await checkedChannels()
+    const channel = channels.find((item) => item.id === current.channelId) || channels[0]
+    return { data: { ...current, channelId: channel?.id || current.channelId, stream: channel?.stream || null, status: radioStatusForStream(channel?.stream || null), metadataStatus: channel?.stream ? "UNKNOWN" : "NOT_CONFIGURED" } }
+  })
+  app.get("/api/v1/radio/queue", async () => ({ data: await radioRepository.getQueue() }))
+  app.get("/api/v1/radio/programmes", async () => ({ data: await radioRepository.getProgrammes() }))
+  app.get("/api/v1/radio/schedule", async (request) => {
+    const query = scheduleQuerySchema.parse(request.query)
+    return { data: await radioRepository.getSchedule(query.from ? new Date(query.from) : undefined, query.to ? new Date(query.to) : undefined) }
+  })
 
   app.post("/api/v1/ai/programmes", async (request) => {
     const input = programmeRequestSchema.parse(request.body)
@@ -113,5 +157,6 @@ export function buildServer(config: ApiConfig = loadConfig()) {
     return reply.send({ data: submission })
   })
 
+  app.addHook("onClose", async () => { await radioRepository.close() })
   return app
 }

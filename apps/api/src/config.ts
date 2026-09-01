@@ -4,11 +4,18 @@ const configSchema = z.object({
   API_HOST: z.string().default("0.0.0.0"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
+  DATABASE_URL: z.string().url().optional().or(z.literal("")),
+  REDIS_URL: z.string().url().optional().or(z.literal("")),
   AI_PROVIDER: z.enum(["development", "openai-compatible"]).default("development"),
   AI_PROVIDER_URL: z.string().url().optional().or(z.literal("")),
   AI_PROVIDER_API_KEY: z.string().optional().or(z.literal("")),
   MIDNIGHT_NETWORK: z.string().default("unconfigured"),
   RADIO_STREAM_URL: z.string().url().optional().or(z.literal("")),
+  RADIO_STREAM_NAME: z.string().trim().min(1).max(120).default("Signal / Main"),
+  RADIO_STREAM_ENABLED: z.preprocess((value) => {
+    if (typeof value === "string") return value.toLowerCase() === "true"
+    return value
+  }, z.boolean().default(false)),
 })
 
 export type ApiConfig = z.infer<typeof configSchema>

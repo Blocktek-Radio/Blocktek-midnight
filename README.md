@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status:** Phase 0 foundation. The repository contains an executable product shell and API boundaries. Live broadcasting, durable application persistence, configured AI providers, and Midnight proofs are not enabled yet.
+> **Status:** Phase 1 radio foundation. The repository contains an executable product shell, a PostgreSQL-backed radio repository, a native browser player, and explicit stream health states. A real stream source, configured AI provider, and Midnight proofs are not enabled yet.
 
 ## Vision and Problem
 
@@ -12,9 +12,9 @@ The project does not make an absolute anonymity claim. Browsers, network infrast
 
 ## Current Status
 
-Phase 0 foundation is implemented. The repository includes the preserved Next.js landing page, product route shells, shared TypeScript contracts, a versioned Fastify API, schema-validated development AI output, submission state transitions, a selective-disclosure policy, tests, and Docker configuration.
+Phase 1 is implemented on top of the Phase 0 foundation. The repository includes shared radio domain contracts, deterministic queue and schedule rules, Drizzle/PostgreSQL persistence with an initial migration, stream reachability checks, structured radio APIs, and a native browser audio player.
 
-The API currently uses process-local development data. `RADIO_STREAM_URL` is optional, AI uses an explicitly labelled development fallback without provider credentials, and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or durable submission record is fabricated.
+The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. `RADIO_STREAM_URL` is optional, AI uses an explicitly labelled development fallback without provider credentials, and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
 
 ## Why Midnight
 
@@ -23,12 +23,13 @@ Midnight is the privacy boundary for contributor credentials, eligibility assert
 ## What Works Today
 
 - `/radio` provides the station, channel, programme, queue, and now-playing product shell.
+- `/radio` includes native audio playback controls with explicit stream-health, error, retry, volume, and API-unavailable states.
 - `/ai-dj` provides a schema-validated programme-generation workflow with a server-side provider boundary.
 - `/contribute` provides a development-only contribution workflow and editorial state transitions.
 - `/verify` exposes Midnight configuration status and a selective-disclosure policy.
 - The versioned Fastify API exposes health, radio read models, AI programme generation, submissions, and verification status.
 - Shared TypeScript packages contain domain types, Zod validation, radio queue rules, AI adapters, and the Midnight integration boundary.
-- Docker Compose runs isolated web, API, PostgreSQL, and Redis services with loopback-only web/API bindings.
+- Docker Compose runs isolated web, API, PostgreSQL, and Redis services with loopback-only web/API bindings; API startup applies the radio migration.
 
 ## Architecture
 
@@ -39,13 +40,13 @@ flowchart TD
     API --> Radio[Radio domain]
     API --> AI[AI provider adapter]
     API --> Midnight[Midnight adapter]
-    API -. future .-> DB[(PostgreSQL)]
-    API -. future .-> Redis[(Redis / BullMQ)]
+    API --> DB[(PostgreSQL)]
+    API -. not required in Phase 1 .-> Redis[(Redis)]
     AI --> Provider[Configured provider]
     Midnight --> Proof[Compact proof verifier]
 ```
 
-The web client owns presentation and interaction. API routes own validation, orchestration, authorization boundaries, and integration status. Domain packages contain reusable rules and schemas. The M0 API keeps data in process memory so the system can run without external application services; the Compose database and Redis containers are infrastructure foundations, not a claim that repositories and migrations are complete.
+The web client owns presentation and interaction. API routes own validation, orchestration, authorization boundaries, and integration status. Domain packages contain reusable rules and schemas. The API selects a PostgreSQL repository when `DATABASE_URL` is configured and otherwise uses a clearly bounded in-memory development repository. Redis is provisioned but not required for Phase 1 reads.
 
 ### Core Data Flow
 
@@ -126,6 +127,7 @@ Endpoints currently include:
 - `GET /api/v1/radio/now-playing`
 - `GET /api/v1/radio/queue`
 - `GET /api/v1/radio/programmes`
+- `GET /api/v1/radio/schedule`
 - `POST /api/v1/ai/programmes`
 - `POST /api/v1/submissions`
 - `GET /api/v1/submissions/:id`
@@ -149,7 +151,7 @@ Audit, workspace packages, shared types, API health and radio read models, tests
 
 ### Phase 1: Radio MVP
 
-Configure a real stream and build the player, station/channel model, now-playing state, queue, programmes, playlists, and scheduling.
+The radio model, persistence, schedule API, stream health boundary, and native browser player are implemented. Configure a real stream and metadata source as deployment work.
 
 ### Phase 2: AI DJ
 
