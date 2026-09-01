@@ -1,4 +1,6 @@
 import type {
+  BroadcastCurrentItem,
+  BroadcastState,
   Channel,
   DataStatus,
   NowPlaying,
@@ -24,6 +26,7 @@ export interface RadioRepository {
   getQueue(limit?: number): Promise<QueueItem[]>
   getProgrammes(): Promise<Programme[]>
   getSchedule(from?: Date, to?: Date): Promise<Schedule[]>
+  getBroadcastState(): Promise<BroadcastState>
   health(): Promise<RadioRepositoryHealth>
   close(): Promise<void>
 }
@@ -61,6 +64,24 @@ export function radioStatusForStream(stream: Pick<Stream, "enabled" | "url" | "h
   if (stream.health === "reachable") return "LIVE"
   if (stream.health === "unreachable") return "OFFLINE"
   return "CONNECTING"
+}
+
+export type BroadcastQueueItem = BroadcastCurrentItem & { path: string }
+
+export interface BroadcastQueueProvider {
+  next(): Promise<BroadcastQueueItem | null>
+}
+
+export type ScheduledWindow = { startTime: string; endTime: string; title: string }
+
+/** Pure, deterministic selection: a scheduled programme wins, then queue, then fallback. */
+export function selectBroadcastItem(
+  scheduled: ScheduledWindow | null,
+  queueItem: BroadcastQueueItem | null,
+  fallback: BroadcastQueueItem | null,
+): BroadcastQueueItem | null {
+  if (scheduled && queueItem) return { ...queueItem, programme: scheduled.title }
+  return queueItem || fallback
 }
 
 export function programmeStatus(startTime: string, endTime: string, now = new Date()): Programme["status"] {
@@ -201,6 +222,26 @@ export class InMemoryRadioRepository implements RadioRepository {
   async getSchedule(from = new Date(0), to = new Date("2999-12-31T00:00:00.000Z")): Promise<Schedule[]> {
     return this.seed.schedule.filter((item) => Date.parse(item.endTime) >= from.getTime() && Date.parse(item.startTime) <= to.getTime())
       .map((item) => ({ ...item, programme: withProgrammeStatus(item.programme) }))
+  }
+
+  async getBroadcastState(): Promise<BroadcastState> {
+    const configured = Boolean(this.seed.stream?.enabled && this.seed.stream.url)
+    return {
+      status: configured ? "STOPPED" : "NOT_CONFIGURED",
+      sessionId: null,
+      mount: null,
+      current: null,
+      health: {
+        configured,
+        sourceAvailable: false,
+        broadcastEngineRunning: false,
+        icecastRunning: false,
+        streamReachable: false,
+        listenerUrlAvailable: false,
+        lastError: null,
+        checkedAt: new Date().toISOString(),
+      },
+    }
   }
 
   async health(): Promise<RadioRepositoryHealth> {

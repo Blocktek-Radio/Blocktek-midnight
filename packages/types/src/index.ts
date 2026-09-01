@@ -160,6 +160,36 @@ export type NowPlaying = {
   metadataStatus: DataStatus
 }
 
+export type BroadcastHealth = {
+  configured: boolean
+  sourceAvailable: boolean
+  broadcastEngineRunning: boolean
+  icecastRunning: boolean
+  streamReachable: boolean
+  listenerUrlAvailable: boolean
+  lastError: string | null
+  checkedAt: string
+}
+
+export type BroadcastCurrentItem = {
+  id: string
+  title: string
+  artist: string
+  album: string | null
+  artworkUrl: string | null
+  programme: string | null
+  startedAt: string
+  source: "music" | "programme" | "podcast" | "broadcast" | "fallback"
+}
+
+export type BroadcastState = {
+  status: "RUNNING" | "STOPPED" | "DEGRADED" | "NOT_CONFIGURED"
+  sessionId: string | null
+  mount: string | null
+  current: BroadcastCurrentItem | null
+  health: BroadcastHealth
+}
+
 export type DisclosureResult = {
   reveal: string[]
   hide: string[]

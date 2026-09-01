@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status:** Phase 1 radio foundation. The repository contains an executable product shell, a PostgreSQL-backed radio repository, a native browser player, and explicit stream health states. A real stream source, configured AI provider, and Midnight proofs are not enabled yet.
+> **Status:** Phase 1B broadcast infrastructure is implemented and ready for external configuration. Icecast, the FFmpeg worker, deterministic media queue, fallback/test-tone path, durable broadcast sessions/events, and API/frontend state synchronization are included. Licensed media, production secrets, and public routing remain operator configuration.
 
 ## Vision and Problem
 
@@ -12,7 +12,7 @@ The project does not make an absolute anonymity claim. Browsers, network infrast
 
 ## Current Status
 
-Phase 1 is implemented on top of the Phase 0 foundation. The repository includes shared radio domain contracts, deterministic queue and schedule rules, Drizzle/PostgreSQL persistence with an initial migration, stream reachability checks, structured radio APIs, and a native browser audio player.
+Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. The worker refuses to claim a broadcast when configuration or media is missing.
 
 The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. `RADIO_STREAM_URL` is optional, AI uses an explicitly labelled development fallback without provider credentials, and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
 
@@ -29,7 +29,9 @@ Midnight is the privacy boundary for contributor credentials, eligibility assert
 - `/verify` exposes Midnight configuration status and a selective-disclosure policy.
 - The versioned Fastify API exposes health, radio read models, AI programme generation, submissions, and verification status.
 - Shared TypeScript packages contain domain types, Zod validation, radio queue rules, AI adapters, and the Midnight integration boundary.
-- Docker Compose runs isolated web, API, PostgreSQL, and Redis services with loopback-only web/API bindings; API startup applies the radio migration.
+- Docker Compose runs isolated web, API, worker, PostgreSQL, Redis, and Icecast services with loopback-only web/API bindings; API startup applies the radio migrations.
+- The worker discovers operator-managed media, applies deterministic queue/programme selection, streams through FFmpeg to private Icecast, persists broadcast sessions/events, and shuts down cleanly.
+- Empty or invalid media does not produce a false `LIVE` state. Operators can explicitly enable a generated 440 Hz test tone for internal stream checks.
 
 ## Architecture
 
@@ -41,12 +43,18 @@ flowchart TD
     API --> AI[AI provider adapter]
     API --> Midnight[Midnight adapter]
     API --> DB[(PostgreSQL)]
-    API -. not required in Phase 1 .-> Redis[(Redis)]
+    API -. optional .-> Redis[(Redis)]
+    Worker --> Scheduler[Deterministic scheduler]
+    Scheduler --> Queue[Queue / media selection]
+    Queue --> FFmpeg[FFmpeg audio process]
+    FFmpeg --> Icecast[Private Icecast]
+    Worker --> Broadcast[(PostgreSQL sessions/events)]
+    API --> Broadcast
     AI --> Provider[Configured provider]
     Midnight --> Proof[Compact proof verifier]
 ```
 
-The web client owns presentation and interaction. API routes own validation, orchestration, authorization boundaries, and integration status. Domain packages contain reusable rules and schemas. The API selects a PostgreSQL repository when `DATABASE_URL` is configured and otherwise uses a clearly bounded in-memory development repository. Redis is provisioned but not required for Phase 1 reads.
+The web client owns presentation and interaction. API routes own validation, orchestration, authorization boundaries, and integration status. Domain packages contain reusable rules and schemas. The API selects a PostgreSQL repository when `DATABASE_URL` is configured and otherwise uses a clearly bounded in-memory development repository. Redis is provisioned but optional; it is not the durable source of radio state.
 
 ### Core Data Flow
 
@@ -70,6 +78,7 @@ Media and streams remain off-chain. AI providers are selected server-side and mu
 app/                       Next.js routes
 components/                Web presentation and product consoles
 apps/api/                  Fastify API
+apps/worker/               Deterministic scheduler and FFmpeg broadcast worker
 packages/types/            Shared schemas and domain types
 packages/radio-core/       Playlist and queue rules
 packages/ai/               AI provider abstraction
@@ -77,6 +86,7 @@ packages/midnight/         Midnight adapter boundary
 contracts/midnight/        Compact integration boundary
 infrastructure/docker/     Production container definitions
 infrastructure/nginx/      Disabled reverse-proxy template
+media/                     Operator-managed audio mount; media is not committed
 ```
 
 ## Local Development
@@ -88,15 +98,15 @@ pnpm dev
 pnpm dev:api
 ```
 
-Open `http://localhost:3000`. The API is available at `http://localhost:4000`.
+Open `http://localhost:3000`. The API is available at `http://localhost:4000`. Without a configured public API or stream, the web application deliberately displays `API UNAVAILABLE` or `NOT CONFIGURED`.
 
 ## Environment Variables
 
 See `.env.example`. Browser-safe configuration is limited to `NEXT_PUBLIC_API_BASE_URL`. Provider keys, database URLs, authentication secrets, Midnight URLs, and stream configuration are server-side only.
 
-## Docker
+## Broadcast configuration and Docker
 
-The production-shaped Compose project is named `blocktek-radio` and uses `blocktek-radio-network`. Web and API bind only to loopback ports `3010` and `4010`; PostgreSQL and Redis have no published host ports.
+The production-shaped Compose project is named `blocktek-radio` and uses `blocktek-radio-network`. Web and API bind only to loopback ports `3010` and `4010`; PostgreSQL, Redis, Icecast, and the worker remain private to the BlockTek network.
 
 ```bash
 cp .env.example .env
@@ -106,7 +116,17 @@ docker compose up -d --build
 docker compose ps
 ```
 
-`docker-compose.dev.yml` starts only project-scoped PostgreSQL and Redis for local dependency work. M0 has no database migration because it has no durable application repository yet. Only BlockTek-owned database, Redis, provider, stream, authentication, and Midnight configuration belongs in `.env`.
+To enable broadcasting, set `RADIO_BROADCAST_ENABLED=true`, provide Icecast source credentials, set `RADIO_PUBLIC_STREAM_URL`, and place owned/licensed audio below `media/`. For an internal no-copyright test, also set `RADIO_TEST_TONE_ENABLED=true`. Keep the test tone disabled in production.
+
+Media is mounted from the dedicated BlockTek path `/opt/blocktek-radio/media` and organized as:
+
+```text
+media/{music,programmes,podcasts,jingles,fallback,generated}/
+```
+
+The worker scans supported files in deterministic filename order, loops the FFmpeg playlist continuously, and uses fallback media when the scheduled queue has no playable item. Missing media produces `NO MEDIA CONFIGURED` and leaves the station offline.
+
+`docker-compose.dev.yml` starts only project-scoped PostgreSQL and Redis for local dependency work. Only BlockTek-owned database, Redis, provider, stream, authentication, Icecast, and Midnight configuration belongs in `.env`.
 
 ## Tests and API
 
@@ -125,6 +145,8 @@ Endpoints currently include:
 - `GET /api/v1/radio/stations`
 - `GET /api/v1/radio/channels`
 - `GET /api/v1/radio/now-playing`
+- `GET /api/v1/radio/status`
+- `GET /api/v1/radio/stream`
 - `GET /api/v1/radio/queue`
 - `GET /api/v1/radio/programmes`
 - `GET /api/v1/radio/schedule`
@@ -135,27 +157,31 @@ Endpoints currently include:
 - `GET /api/v1/midnight/status`
 - `GET /api/v1/verification/disclosure`
 
+`/api/v1/radio/status` reports configured, reachable, worker, Icecast, listener, and current-item state without returning passwords or source credentials. `LIVE` requires a configured reachable listener stream; `OFFLINE`, `CONNECTING`, and `NOT_CONFIGURED` remain explicit states.
+
 ## Security Model
 
 The contribution flow is development-only and currently lacks authentication, encryption, evidence storage, rate limiting, and durable persistence. Do not submit real sensitive information. The intended disclosure policy reveals eligibility only and hides name, email, location, wallet, organisation, and other identity fields. Editorial review remains a human-controlled boundary for allegations, moderation, and approval to broadcast.
 
+Icecast source, admin, relay, database, Redis, and provider credentials are server-side only. The browser receives only the public listener URL and API read models. Icecast is not publicly exposed by the Compose stack; the eventual route should be `radio domain -> Nginx -> Icecast`, with the API routed separately.
+
 ## Deployment
 
-BlockTek Radio runs as an isolated application stack on a shared VPS. Docker Compose uses its own project/network namespace, loopback-only web/API bindings, and private PostgreSQL/Redis services without reusing existing tenant-owned dependencies. No BlockTek Nginx route, production domain, or TLS certificate is configured. Nginx, DNS, TLS, firewall, backups, and production migrations require an independent deployment review.
+BlockTek Radio runs as an isolated application stack on a shared VPS. Docker Compose uses its own project/network namespace, loopback-only web/API bindings, and private PostgreSQL/Redis/Icecast services without reusing existing tenant-owned dependencies. No production Nginx route, domain, or TLS certificate is configured. DNS, TLS, firewall, backups, media licensing, and production secret provisioning require an independent deployment review.
 
 ## Roadmap
 
-### Phase 0: Foundation
+### Completed: Phases 0, 0.5, 1, and 1B
 
-Audit, workspace packages, shared types, API health and radio read models, tests, Docker, and project boundaries.
+Foundation, isolated VPS/Compose boundaries, PostgreSQL radio persistence, schedule/queue APIs, native browser playback, private Icecast, FFmpeg continuous audio, deterministic scheduling, filesystem media management, fallback/test tone, durable broadcast sessions/events, health/readiness reporting, and real now-playing synchronization are implemented.
 
-### Phase 1: Radio MVP
+### Next: external broadcast configuration
 
-The radio model, persistence, schedule API, stream health boundary, and native browser player are implemented. Configure a real stream and metadata source as deployment work.
+Provide licensed/project-owned media, production Postgres and Icecast secrets, a public stream URL, DNS/TLS/Nginx routing, backups, and resource/log monitoring. The station must not be labelled production-live until these are configured and verified.
 
-### Phase 2: AI DJ
+### Phase 2: AI DJ & Intelligent Programming
 
-Add real provider-backed playlist and programme generation, introductions, recommendation metadata, and explicit fallback behavior.
+Add real provider-backed playlist and programme generation, introductions, recommendation metadata, and explicit fallback behavior. AI must plug into the existing queue boundary and remain optional for basic broadcasting.
 
 ### Phase 3: Midnight Privacy
 

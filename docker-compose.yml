@@ -27,6 +27,11 @@ services:
       WEB_BASE_URL: ${WEB_BASE_URL:?WEB_BASE_URL must be set}
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER must be set}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-blocktek_radio}
       REDIS_URL: redis://redis:6379
+      RADIO_STREAM_URL: ${RADIO_STREAM_URL:-}
+      RADIO_PUBLIC_STREAM_URL: ${RADIO_PUBLIC_STREAM_URL:-}
+      RADIO_STREAM_NAME: ${RADIO_STREAM_NAME:-Signal / Main}
+      RADIO_STREAM_ENABLED: ${RADIO_STREAM_ENABLED:-false}
+      RADIO_BROADCAST_ENABLED: ${RADIO_BROADCAST_ENABLED:-false}
     ports:
       - "127.0.0.1:${BLOCKTEK_API_BIND_PORT:-4010}:4000"
     depends_on:
@@ -40,6 +45,56 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER must be set}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-blocktek_radio}
+      MEDIA_ROOT: /opt/blocktek-radio/media
+      FALLBACK_AUDIO_PATH: ${FALLBACK_AUDIO_PATH:-/opt/blocktek-radio/media/fallback}
+      RADIO_BROADCAST_ENABLED: ${RADIO_BROADCAST_ENABLED:-false}
+      RADIO_TEST_TONE_ENABLED: ${RADIO_TEST_TONE_ENABLED:-false}
+      RADIO_STATION_ID: ${RADIO_STATION_ID:-blocktek-main}
+      RADIO_STATION_NAME: ${RADIO_STATION_NAME:-BlockTek Radio}
+      RADIO_AUDIO_BITRATE: ${RADIO_AUDIO_BITRATE:-128k}
+      RADIO_METADATA_INTERVAL_SECONDS: ${RADIO_METADATA_INTERVAL_SECONDS:-180}
+      ICECAST_SOURCE_USER: ${ICECAST_SOURCE_USER:-source}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:?ICECAST_SOURCE_PASSWORD must be set}
+      ICECAST_HOST: icecast
+      ICECAST_PORT: 8000
+    volumes:
+      - ${BLOCKTEK_MEDIA_PATH:-./media}:/opt/blocktek-radio/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      icecast:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+  icecast:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.icecast
+    user: "9999:950"
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:?ICECAST_SOURCE_PASSWORD must be set}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:?ICECAST_ADMIN_PASSWORD must be set}
+      ICECAST_RELAY_PASSWORD: ${ICECAST_RELAY_PASSWORD:?ICECAST_RELAY_PASSWORD must be set}
+      ICECAST_HOSTNAME: ${ICECAST_HOSTNAME:-localhost}
+      ICECAST_MAX_CLIENTS: ${ICECAST_MAX_CLIENTS:-100}
+      ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-2}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
   postgres:
     image: postgres:16-alpine
     environment:

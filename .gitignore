@@ -16,5 +16,6 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 apps/api/dist/
+apps/worker/dist/
 .DS_Store
 next-env.d.ts

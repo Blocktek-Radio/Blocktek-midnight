@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @blocktek/api dev",
     "build": "next build",
     "build:api": "pnpm --filter @blocktek/api build",
+    "build:worker": "pnpm --filter @blocktek/worker build",
     "db:migrate": "pnpm --filter @blocktek/api db:migrate",
     "start": "next start",
     "start:api": "pnpm --filter @blocktek/api start",

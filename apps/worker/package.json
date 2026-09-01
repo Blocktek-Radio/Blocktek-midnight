@@ -1,0 +1,22 @@
+{
+  "name": "@blocktek/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/main.ts",
+    "dev": "tsx watch src/main.ts",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@blocktek/radio-core": "workspace:*",
+    "@blocktek/types": "workspace:*",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4.20.5",
+    "typescript": "5.7.3"
+  }
+}

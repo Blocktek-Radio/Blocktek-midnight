@@ -1,0 +1,6 @@
+FROM icedream/icecast:2.4.4
+USER root
+COPY infrastructure/docker/icecast-entrypoint.sh /usr/local/bin/blocktek-icecast-entrypoint
+RUN chmod 0755 /usr/local/bin/blocktek-icecast-entrypoint && mkdir -p /data /tmp/icecast && chown -R 9999:950 /data /tmp/icecast
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["/usr/local/bin/blocktek-icecast-entrypoint"]

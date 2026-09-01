@@ -39,7 +39,7 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
   const midnight = new UnconfiguredMidnightAdapter()
   const submissions = new Map<string, Submission>()
   const radioRepository = dependencies.radioRepository || new InMemoryRadioRepository(createRadioSeed({
-    streamUrl: config.RADIO_STREAM_URL || undefined,
+    streamUrl: config.RADIO_PUBLIC_STREAM_URL || config.RADIO_STREAM_URL || undefined,
     streamName: config.RADIO_STREAM_NAME,
     streamEnabled: config.RADIO_STREAM_ENABLED,
   }))
@@ -79,17 +79,22 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
       radioStream: Boolean(config.RADIO_STREAM_ENABLED && config.RADIO_STREAM_URL),
       aiProvider: config.AI_PROVIDER,
       midnight: midnight.status().status,
+      broadcast: config.RADIO_BROADCAST_ENABLED ? "enabled" : "not-configured",
+      redis: "optional",
     },
   }))
 
   app.get("/api/v1/health/ready", async (_request, reply) => {
     const persistence = await radioRepository.health()
     const ready = persistence.status !== "unavailable"
+    const broadcast = await radioRepository.getBroadcastState()
     return reply.send({
       status: persistence.status === "ready" ? "ok" : "degraded",
       ready,
       persistence: persistence.status,
       redis: "not-required",
+      broadcastEngine: broadcast.status === "RUNNING" || broadcast.status === "DEGRADED" ? "running" : config.RADIO_BROADCAST_ENABLED ? "not-running" : "not-required",
+      icecast: broadcast.health.icecastRunning ? "running" : config.RADIO_BROADCAST_ENABLED ? "not-reachable" : "not-required",
       midnight: midnight.status().status,
     })
   })
@@ -104,7 +109,21 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
     const current = await radioRepository.getNowPlaying()
     const channels = await checkedChannels()
     const channel = channels.find((item) => item.id === current.channelId) || channels[0]
-    return { data: { ...current, channelId: channel?.id || current.channelId, stream: channel?.stream || null, status: radioStatusForStream(channel?.stream || null), metadataStatus: channel?.stream ? "UNKNOWN" : "NOT_CONFIGURED" } }
+    return { data: { ...current, channelId: channel?.id || current.channelId, stream: channel?.stream || null, status: radioStatusForStream(channel?.stream || null), metadataStatus: current.metadataStatus } }
+  })
+  app.get("/api/v1/radio/status", async () => {
+    const channels = await checkedChannels()
+    const stream = channels[0]?.stream || null
+    const broadcast = await radioRepository.getBroadcastState()
+    return { data: {
+      status: radioStatusForStream(stream),
+      stream: { configured: Boolean(stream?.url && stream.enabled), reachable: stream?.health === "reachable", url: stream?.url || null },
+      broadcast: { ...broadcast, health: { ...broadcast.health, streamReachable: stream?.health === "reachable" } },
+    } }
+  })
+  app.get("/api/v1/radio/stream", async () => {
+    const channels = await checkedChannels()
+    return { data: channels[0]?.stream || null }
   })
   app.get("/api/v1/radio/queue", async () => ({ data: await radioRepository.getQueue() }))
   app.get("/api/v1/radio/programmes", async () => ({ data: await radioRepository.getProgrammes() }))

@@ -11,11 +11,15 @@ const configSchema = z.object({
   AI_PROVIDER_API_KEY: z.string().optional().or(z.literal("")),
   MIDNIGHT_NETWORK: z.string().default("unconfigured"),
   RADIO_STREAM_URL: z.string().url().optional().or(z.literal("")),
+  RADIO_PUBLIC_STREAM_URL: z.string().url().optional().or(z.literal("")),
   RADIO_STREAM_NAME: z.string().trim().min(1).max(120).default("Signal / Main"),
   RADIO_STREAM_ENABLED: z.preprocess((value) => {
     if (typeof value === "string") return value.toLowerCase() === "true"
     return value
   }, z.boolean().default(false)),
+  RADIO_BROADCAST_ENABLED: z.preprocess((value) => typeof value === "string" ? value.toLowerCase() === "true" : value, z.boolean().default(false)),
+  ICECAST_MOUNT: z.string().trim().regex(/^\/.+/).default("/live"),
+  MEDIA_ROOT: z.string().trim().default("/opt/blocktek-radio/media"),
 })
 
 export type ApiConfig = z.infer<typeof configSchema>

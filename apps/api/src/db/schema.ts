@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
+import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -90,3 +90,38 @@ export const schedules = pgTable("schedules", {
 }, (table) => ({
   channelTimeIdx: index("schedules_channel_time_idx").on(table.channelId, table.startTime, table.endTime),
 }))
+
+export const mediaAssets = pgTable("media_assets", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+  album: text("album"),
+  path: text("path").notNull(),
+  kind: text("kind").notNull(),
+  durationSeconds: integer("duration_seconds"),
+  artworkUrl: text("artwork_url"),
+  enabled: boolean("enabled").notNull().default(true),
+  ...timestamps,
+}, (table) => ({ kindIdx: index("media_assets_kind_enabled_idx").on(table.kind, table.enabled) }))
+
+export const broadcastSessions = pgTable("broadcast_sessions", {
+  id: text("id").primaryKey(),
+  stationId: text("station_id").notNull().references(() => stations.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  streamMount: text("stream_mount").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  ...timestamps,
+}, (table) => ({ stationStatusIdx: index("broadcast_sessions_station_status_idx").on(table.stationId, table.status, table.startedAt) }))
+
+export const broadcastEvents = pgTable("broadcast_events", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull().references(() => broadcastSessions.id, { onDelete: "cascade" }),
+  mediaAssetId: text("media_asset_id").references(() => mediaAssets.id, { onDelete: "set null" }),
+  eventType: text("event_type").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({ sessionStartedIdx: index("broadcast_events_session_started_idx").on(table.sessionId, table.startedAt) }))

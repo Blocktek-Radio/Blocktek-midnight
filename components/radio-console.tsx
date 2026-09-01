@@ -20,7 +20,7 @@ export function RadioConsole() {
   const [muted, setMuted] = useState(false)
 
   useEffect(() => {
-    Promise.all([
+    const loadRadio = () => Promise.all([
       apiFetch<{ data: NowPlaying }>("/api/v1/radio/now-playing"),
       apiFetch<{ data: QueueItem[] }>("/api/v1/radio/queue"),
       apiFetch<{ data: { stream: Stream | null }[] }>("/api/v1/radio/channels"),
@@ -35,6 +35,15 @@ export function RadioConsole() {
       setRadioStatus("OFFLINE")
       setError("API UNAVAILABLE. The radio service is not reachable from this browser.")
     })
+    void loadRadio()
+    const interval = window.setInterval(() => {
+      apiFetch<{ data: NowPlaying }>("/api/v1/radio/now-playing").then((current) => {
+        setNowPlaying(current.data)
+        setRadioStatus(current.data.status)
+        setApiUnavailable(false)
+      }).catch(() => setApiUnavailable(true))
+    }, 15000)
+    return () => window.clearInterval(interval)
   }, [])
 
   useEffect(() => {

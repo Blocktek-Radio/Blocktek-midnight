@@ -8,7 +8,7 @@ const config = loadConfig()
 async function start() {
   const radioRepository = config.DATABASE_URL
     ? createPostgresRadioRepository(config.DATABASE_URL, {
-      url: config.RADIO_STREAM_URL || undefined,
+      url: config.RADIO_PUBLIC_STREAM_URL || config.RADIO_STREAM_URL || undefined,
       name: config.RADIO_STREAM_NAME,
       enabled: config.RADIO_STREAM_ENABLED,
     })

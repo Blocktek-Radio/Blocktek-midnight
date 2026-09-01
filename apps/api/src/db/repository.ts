@@ -2,7 +2,7 @@ import { asc, eq, and, gte, lte, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import { radioStatusForStream, type RadioRepository, type RadioRepositoryHealth, withProgrammeStatus, orderQueue } from "@blocktek/radio-core"
-import type { Album, Artist, Channel, NowPlaying, Playlist, Programme, QueueItem, Schedule, Station, Stream, Track } from "@blocktek/types"
+import type { Album, Artist, BroadcastCurrentItem, BroadcastState, Channel, NowPlaying, Playlist, Programme, QueueItem, Schedule, Station, Stream, Track } from "@blocktek/types"
 import * as schema from "./schema.js"
 
 export type StreamConfiguration = {
@@ -152,14 +152,25 @@ export class PostgresRadioRepository implements RadioRepository {
     const programmes = await this.getProgrammes()
     const programme = programmes.find((item) => item.status === "CURRENT") || null
     const stream = channel?.stream || null
+    const broadcast = await this.getBroadcastState()
+    const current = broadcast.current
+    const track = current ? {
+      id: current.id,
+      title: current.title,
+      artist: { id: `artist-${current.artist.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: current.artist },
+      album: current.album ? { id: `album-${current.id}`, title: current.album, artworkUrl: current.artworkUrl } : null,
+      durationSeconds: 0,
+      artworkUrl: current.artworkUrl,
+      dataStatus: "REAL" as const,
+    } : null
     return {
       status: radioStatusForStream(stream),
       channelId: channel?.id || "signal-01",
-      track: null,
-      programme,
-      startedAt: programme?.startTime || null,
+      track,
+      programme: current?.programme ? programmes.find((item) => item.title === current.programme) || programme : programme,
+      startedAt: current?.startedAt || programme?.startTime || null,
       stream,
-      metadataStatus: "UNKNOWN",
+      metadataStatus: current ? "REAL" : stream ? "UNKNOWN" : "NOT_CONFIGURED",
     }
   }
 
@@ -227,6 +238,49 @@ export class PostgresRadioRepository implements RadioRepository {
         dataStatus: "REAL",
       }
     })
+  }
+
+  async getBroadcastState(): Promise<BroadcastState> {
+    const [session] = await this.client<{
+      id: string
+      status: string
+      stream_mount: string
+      last_error: string | null
+      started_at: Date
+    }[]>`SELECT id, status, stream_mount, last_error, started_at FROM broadcast_sessions WHERE status IN ('RUNNING', 'DEGRADED') ORDER BY started_at DESC LIMIT 1`
+    const [event] = session ? await this.client<{
+      id: string
+      event_type: string
+      metadata: Record<string, unknown>
+      started_at: Date
+    }[]>`SELECT id, event_type, metadata, started_at FROM broadcast_events WHERE session_id = ${session.id} AND event_type = 'track_started' ORDER BY started_at DESC LIMIT 1` : []
+    const metadata = event?.metadata || {}
+    const configured = Boolean(this.streamConfiguration.enabled && this.streamConfiguration.url)
+    return {
+      status: session ? (session.status === "DEGRADED" ? "DEGRADED" : "RUNNING") : (configured ? "STOPPED" : "NOT_CONFIGURED"),
+      sessionId: session?.id || null,
+      mount: session?.stream_mount || null,
+      current: event ? {
+        id: String(metadata.id || event.id),
+        title: String(metadata.title || "Unknown track"),
+        artist: String(metadata.artist || "Unknown artist"),
+        album: metadata.album ? String(metadata.album) : null,
+        artworkUrl: metadata.artworkUrl ? String(metadata.artworkUrl) : null,
+        programme: metadata.programme ? String(metadata.programme) : null,
+        startedAt: new Date(event.started_at).toISOString(),
+        source: (["music", "programme", "podcast", "broadcast", "fallback"] as const).includes(metadata.source as never) ? metadata.source as BroadcastCurrentItem["source"] : "music",
+      } : null,
+      health: {
+        configured,
+        sourceAvailable: Boolean(event),
+        broadcastEngineRunning: Boolean(session),
+        icecastRunning: Boolean(session),
+        streamReachable: false,
+        listenerUrlAvailable: configured,
+        lastError: session?.last_error || null,
+        checkedAt: new Date().toISOString(),
+      },
+    }
   }
 
   async health(): Promise<RadioRepositoryHealth> {
