@@ -1,0 +1,10 @@
+# Never upload local credentials or environment files.
+.env*
+
+# Frontend deployment does not need backend-only or internal audit material.
+apps/api/
+contracts/
+docs/
+infrastructure/
+docker-compose*.yml
+.dockerignore
