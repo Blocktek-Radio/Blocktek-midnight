@@ -1,0 +1,20 @@
+FROM node:22-alpine AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable
+RUN corepack prepare pnpm@10.7.0 --activate
+WORKDIR /workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/types/package.json packages/types/package.json
+COPY packages/radio-core/package.json packages/radio-core/package.json
+COPY packages/ai/package.json packages/ai/package.json
+COPY packages/midnight/package.json packages/midnight/package.json
+RUN pnpm install --frozen-lockfile
+COPY apps/api apps/api
+COPY packages packages
+COPY tsconfig.json tsconfig.json
+RUN pnpm --filter @blocktek/api build
+USER node
+EXPOSE 4000
+CMD ["pnpm", "--filter", "@blocktek/api", "start"]

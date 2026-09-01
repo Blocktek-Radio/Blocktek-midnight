@@ -1,4 +1,5 @@
 import { ArrowUpRight, Radio } from "lucide-react"
+import Link from "next/link"
 
 const FOOTER_COLS = [
   {
@@ -25,19 +26,19 @@ export function SiteFooter() {
             Tune in to a network no one can switch off.
           </h2>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <a
-              href="#top"
+            <Link
+              href="/radio"
               className="group inline-flex items-center justify-center gap-2 bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
             >
               Launch App
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            </a>
-            <a
-              href="#top"
+            </Link>
+            <Link
+              href="/#protocol"
               className="inline-flex items-center justify-center gap-2 border border-background/25 px-6 py-3 text-sm font-medium text-background transition-colors hover:bg-background/10"
             >
               Read Whitepaper
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -63,9 +64,9 @@ export function SiteFooter() {
               <ul className="mt-4 space-y-3">
                 {col.links.map((link) => (
                   <li key={link}>
-                    <a href="#top" className="text-sm text-background/80 transition-colors hover:text-background">
+                    <Link href={link === "Whitepaper" ? "/#protocol" : link === "BTR Token" ? "/#token" : "/#top"} className="text-sm text-background/80 transition-colors hover:text-background">
                       {link}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.git
+.next
+node_modules
+apps/api/dist
+**/node_modules
+**/.next
+**/dist
+*.log

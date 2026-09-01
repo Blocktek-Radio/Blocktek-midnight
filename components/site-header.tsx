@@ -1,16 +1,16 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Menu, X, Radio } from "lucide-react"
 
 const NAV_LINKS = [
-  { label: "Protocol", href: "#protocol" },
-  { label: "Token", href: "#token" },
-  { label: "AI Audio", href: "#ai" },
-  { label: "Agents", href: "#agents" },
-  { label: "Team", href: "#team" },
-  { label: "Use Cases", href: "#use-cases" },
-  { label: "Roadmap", href: "#roadmap" },
+  { label: "Radio", href: "/radio" },
+  { label: "AI DJ", href: "/ai-dj" },
+  { label: "Contribute", href: "/contribute" },
+  { label: "Verify", href: "/verify" },
+  { label: "Protocol", href: "/#protocol" },
+  { label: "Roadmap", href: "/#roadmap" },
 ]
 
 export function SiteHeader() {
@@ -30,29 +30,29 @@ export function SiteHeader() {
 
         <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
           {NAV_LINKS.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <a
-            href="#top"
+          <Link
+            href="/#protocol"
             className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
           >
             Read Whitepaper
-          </a>
-          <a
-            href="#launch"
+          </Link>
+          <Link
+            href="/radio"
             className="bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
           >
             Launch App
-          </a>
+          </Link>
         </div>
 
         <button
@@ -70,22 +70,22 @@ export function SiteHeader() {
         <div className="border-t border-border bg-background md:hidden">
           <nav className="mx-auto flex max-w-7xl flex-col px-4 py-2" aria-label="Mobile">
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className="border-b border-border py-3 text-sm text-foreground last:border-0"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
-            <a
-              href="#launch"
+            <Link
+              href="/radio"
               onClick={() => setOpen(false)}
               className="mt-3 mb-2 bg-foreground px-4 py-2.5 text-center text-sm font-medium text-background"
             >
               Launch App
-            </a>
+            </Link>
           </nav>
         </div>
       )}

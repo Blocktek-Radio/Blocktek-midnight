@@ -1,0 +1,49 @@
+# BlockTek template only. Do not enable until DNS, TLS, and the production
+# Compose stack have been verified on this VPS.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name radio.example.invalid;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name radio.example.invalid;
+
+    # Set real certificate paths during an authorized deployment.
+    ssl_certificate /etc/letsencrypt/live/radio.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/radio.example.invalid/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3010;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api.radio.example.invalid;
+
+    ssl_certificate /etc/letsencrypt/live/radio.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/radio.example.invalid/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:4010;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}

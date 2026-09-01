@@ -12,9 +12,11 @@ export function GridField({ className }: { className?: string }) {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    if (canvas === null) return
+    const canvasElement: HTMLCanvasElement = canvas
+    const context = canvasElement.getContext("2d")
+    if (context === null) return
+    const drawingContext: CanvasRenderingContext2D = context
 
     const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
@@ -27,20 +29,20 @@ export function GridField({ className }: { className?: string }) {
     const accent = "rgba(120, 160, 255, ALPHA)"
 
     function resize() {
-      const parent = canvas.parentElement
+      const parent = canvasElement.parentElement
       if (!parent) return
       dpr = Math.min(window.devicePixelRatio || 1, 2)
       width = parent.clientWidth
       height = parent.clientHeight
-      canvas.width = width * dpr
-      canvas.height = height * dpr
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      canvasElement.width = width * dpr
+      canvasElement.height = height * dpr
+      canvasElement.style.width = `${width}px`
+      canvasElement.style.height = `${height}px`
+      drawingContext.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     function draw() {
-      ctx.clearRect(0, 0, width, height)
+      drawingContext.clearRect(0, 0, width, height)
 
       const horizon = height * 0.42
       const rows = 26
@@ -51,12 +53,12 @@ export function GridField({ className }: { className?: string }) {
       // vertical converging lines
       for (let i = -cols; i <= cols; i++) {
         const x = width / 2 + (i / cols) * width * 1.15
-        ctx.beginPath()
-        ctx.strokeStyle = accent.replace("ALPHA", "0.10")
-        ctx.lineWidth = 1
-        ctx.moveTo(width / 2, horizon)
-        ctx.lineTo(x, height)
-        ctx.stroke()
+        drawingContext.beginPath()
+        drawingContext.strokeStyle = accent.replace("ALPHA", "0.10")
+        drawingContext.lineWidth = 1
+        drawingContext.moveTo(width / 2, horizon)
+        drawingContext.lineTo(x, height)
+        drawingContext.stroke()
       }
 
       // horizontal scrolling lines with perspective easing
@@ -65,26 +67,26 @@ export function GridField({ className }: { className?: string }) {
         const eased = p * p
         const y = horizon + eased * (height - horizon)
         const alpha = 0.05 + eased * 0.22
-        ctx.beginPath()
-        ctx.strokeStyle = accent.replace("ALPHA", alpha.toFixed(3))
-        ctx.lineWidth = 1
-        ctx.moveTo(0, y)
-        ctx.lineTo(width, y)
-        ctx.stroke()
+        drawingContext.beginPath()
+        drawingContext.strokeStyle = accent.replace("ALPHA", alpha.toFixed(3))
+        drawingContext.lineWidth = 1
+        drawingContext.moveTo(0, y)
+        drawingContext.lineTo(width, y)
+        drawingContext.stroke()
       }
 
       // glowing horizon line
-      const grad = ctx.createLinearGradient(0, horizon - 60, 0, horizon + 4)
+      const grad = drawingContext.createLinearGradient(0, horizon - 60, 0, horizon + 4)
       grad.addColorStop(0, accent.replace("ALPHA", "0"))
       grad.addColorStop(1, accent.replace("ALPHA", "0.28"))
-      ctx.fillStyle = grad
-      ctx.fillRect(0, horizon - 60, width, 64)
-      ctx.beginPath()
-      ctx.strokeStyle = accent.replace("ALPHA", "0.6")
-      ctx.lineWidth = 1.5
-      ctx.moveTo(0, horizon)
-      ctx.lineTo(width, horizon)
-      ctx.stroke()
+      drawingContext.fillStyle = grad
+      drawingContext.fillRect(0, horizon - 60, width, 64)
+      drawingContext.beginPath()
+      drawingContext.strokeStyle = accent.replace("ALPHA", "0.6")
+      drawingContext.lineWidth = 1.5
+      drawingContext.moveTo(0, horizon)
+      drawingContext.lineTo(width, horizon)
+      drawingContext.stroke()
 
       if (!prefersReduced) {
         t += 0.15

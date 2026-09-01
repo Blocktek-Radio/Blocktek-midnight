@@ -99,7 +99,7 @@ export function Hero() {
               ))}
             </div>
             <p className="font-mono text-[0.7rem] uppercase tracking-widest text-hero-muted">
-              // Live_Waveform_Render / Dither_Mode_On
+              {"// Live_Waveform_Render / Dither_Mode_On"}
             </p>
           </div>
         </div>

@@ -1,0 +1,4 @@
+import { AiDjConsole } from "@/components/ai-dj-console"
+import { ProductShell } from "@/components/product-shell"
+
+export default function AiDjPage() { return <ProductShell><section className="border-b border-border"><div className="mx-auto max-w-7xl px-4 py-20 md:px-8 md:py-28"><div className="mb-4 flex items-center gap-3"><span className="font-mono text-xs uppercase tracking-widest text-accent">AI DJ</span><span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Structured generation</span></div><h1 className="max-w-3xl text-balance text-5xl font-semibold leading-[0.98] tracking-tight md:text-7xl">Shape the next programme.</h1><p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">Generate a validated programme brief through the server-side provider boundary. Missing provider credentials remain visible as development fallback output.</p><div className="mt-12"><AiDjConsole /></div></div></section></ProductShell> }
