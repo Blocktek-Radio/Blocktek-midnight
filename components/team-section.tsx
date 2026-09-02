@@ -8,20 +8,21 @@ type TeamMember = {
 
 const TEAM: TeamMember[] = [
   {
-    name: "Stanley",
-    role: "Co-Founder & Head of Partnership & Business Development",
+    name: "Stan",
+    role: "Founder & Head of Partnership & Business Development",
     image: "/team/stan.jpg",
-  },
-  {
-    name: "Frank Hazard",
-    role: "Co-Founder & Blockchain & AI Developer & Researcher",
-    image: "/team/FrankHazard.jpeg",
   },
   {
     name: "Bratipah",
     role: "Co-Founder & Blockchain Protocol Engineer",
     image: "/team/Bratipah.jpg",
   },
+  {
+    name: "Frank Hazard",
+    role: "CTO & Blockchain & AI Developer & Researcher",
+    image: "/team/FrankHazard.jpeg",
+  },
+  
 ]
 
 export function TeamSection() {
