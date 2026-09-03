@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status:** Phase 1 is externally operational. Phase 2 implementation is present behind an optional provider boundary: ASI Cloud is primary, Groq is fallback, and deterministic programming remains authoritative when AI is unavailable. Midnight remains intentionally unconfigured.
+> **Status (verified 2026-09-03):** Phase 1 is live in production and Phase 2 is deployed. The API reports `AI_AVAILABLE` in `AI_ASSISTED` mode with ASI Cloud primary and Groq fallback; deterministic programming remains authoritative when AI is unavailable. Midnight remains intentionally unconfigured.
 
 ## Vision and Problem
 
@@ -12,9 +12,9 @@ The project does not make an absolute anonymity claim. Browsers, network infrast
 
 ## Current Status
 
-Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. The production instance is configured at `https://blocktek-radio.duckdns.org`; the Vercel frontend is `https://blockteck-radio.vercel.app/`.
+Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. Phase 2 adds deployed AI programming with durable decision and queue records. The production instance is configured at `https://blocktek-radio.duckdns.org`; the Vercel frontend is `https://blockteck-radio.vercel.app/`.
 
-The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. `RADIO_STREAM_URL` is optional, AI uses an explicitly labelled development fallback without provider credentials, and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
+The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. Production AI uses server-side ASI Cloud and Groq credentials; host development without provider credentials uses an explicitly labelled deterministic fallback. `RADIO_STREAM_URL` remains optional and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
 
 ## Why Midnight
 
@@ -25,6 +25,7 @@ Midnight is the privacy boundary for contributor credentials, eligibility assert
 - `/radio` provides the station, channel, programme, queue, and now-playing product shell.
 - `/radio` includes native audio playback controls with explicit stream-health, error, retry, volume, and API-unavailable states.
 - `/ai-dj` provides a schema-validated programme-generation workflow with a server-side provider boundary.
+- `/ai-dj` reports the live AI status, programming mode, provider metadata, generated programme provenance, and decision explanation without exposing credentials.
 - `/contribute` provides a development-only contribution workflow and editorial state transitions.
 - `/verify` exposes Midnight configuration status and a selective-disclosure policy.
 - The versioned Fastify API exposes health, radio read models, AI programme generation, submissions, and verification status.
@@ -33,6 +34,7 @@ Midnight is the privacy boundary for contributor credentials, eligibility assert
 - The worker discovers operator-managed media, applies deterministic queue/programme selection, streams through FFmpeg to private Icecast, persists broadcast sessions/events, and shuts down cleanly.
 - Production media is discovered from the seven supplied MP3 files in `media/music/`; FFmpeg uses their probed durations for track transitions and Icecast source metadata identifies `BlockTek Radio`.
 - The public HTTPS stream at `/stream` proxies privately to Icecast `/live`; the public API reports the same canonical listener URL and current persisted broadcast item.
+- AI-generated windows are persisted in PostgreSQL, claimed by the BlockTek worker, played through FFmpeg, and recorded as real broadcast events. The deployed queue has been verified in `PENDING`, `PLAYING`, and `PLAYED` states.
 - The production CORS policy allows the exact Vercel origin for API and stream requests; no server credentials are exposed to the browser.
 - Empty or invalid media does not produce a false `LIVE` state. Operators can explicitly enable a generated 440 Hz test tone for internal stream checks.
 
@@ -212,19 +214,19 @@ BlockTek Radio runs as an isolated application stack on a shared VPS. Docker Com
 
 Foundation, isolated VPS/Compose boundaries, PostgreSQL radio persistence, schedule/queue APIs, native browser playback, private Icecast, FFmpeg continuous audio, deterministic scheduling, filesystem media management, fallback/test tone, duration-aware real-media transitions, durable broadcast sessions/events, health/readiness reporting, public Nginx/TLS routing, Vercel API configuration, and real now-playing synchronization are implemented and externally verified.
 
-### Next: Phase 1 operational hardening
+### Ongoing: Phase 1 operational hardening
 
 Add operator-supplied fallback/jingle audio to the currently empty fallback directories, formalize backups and log retention, and add external uptime/stream monitoring. The primary seven-file licensed/project-owned music library is already active. Keep browser Play verification in the release checklist after frontend changes.
 
-### Phase 2: AI DJ & Intelligent Programming
+### Completed: Phase 2 AI DJ & Intelligent Programming
 
-The AI pipeline is `bounded broadcast context -> ASI Cloud -> Groq fallback -> strict JSON/schema validation -> media allowlist/cooldown policy -> PostgreSQL decision and queue -> worker -> FFmpeg -> private Icecast`. Provider keys remain server-side and are never returned by the API. The primary environment names are `ASI_CLOUD_BASE_URL`, `ASI_CLOUD_CHAT_MODEL`, `ASI_CLOUD_API_KEY2`; fallback uses `GROQ_API_KEY` and `GROQ_MODEL`.
+The deployed AI pipeline is `bounded broadcast context -> ASI Cloud -> Groq fallback -> strict JSON/schema validation -> media allowlist/cooldown policy -> PostgreSQL decision and queue -> worker -> FFmpeg -> private Icecast`. Provider keys remain server-side and are never returned by the API. The primary environment names are `ASI_CLOUD_BASE_URL`, `ASI_CLOUD_CHAT_MODEL`, `ASI_CLOUD_API_KEY2`; fallback uses `GROQ_API_KEY` and `GROQ_MODEL`.
 
-Programming modes are `DETERMINISTIC`, `AI_ASSISTED`, and `AI_PROGRAMMED`. All modes retain deterministic eligibility, duplicate, cooldown, duration, and fallback rules. AI generates bounded multi-track windows rather than controlling FFmpeg or executing tools. The `ai_programming_decisions` table stores structured proposal metadata, provider/model, validation status, fallback reason, explanation, context hash, and latency. Accepted items are inserted into `ai_programming_queue`; the BlockTek worker claims those items before deterministic media and marks them played. If both providers fail, the worker continues with the normal catalogue loop.
+Programming modes are `DETERMINISTIC`, `AI_ASSISTED`, and `AI_PROGRAMMED`; production is currently configured as `AI_ASSISTED`. All modes retain deterministic eligibility, duplicate, cooldown, duration, and fallback rules. AI generates bounded multi-track windows rather than controlling FFmpeg or executing tools. The additive migration `0002_ai_programming.sql` creates `ai_programming_decisions` and `ai_programming_queue`. Accepted items are inserted into the durable queue; the BlockTek worker claims those items before deterministic media and marks them played. If both providers fail, the worker continues with the normal catalogue loop.
 
 The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Full Midnight/ZK eligibility and selective disclosure remain Phase 3 work.
 
-### Phase 3: Midnight Privacy
+### Next: Phase 3 Midnight Privacy
 
 Add wallet integration, a Compact eligibility contract, proof creation and verification, contributor credentials, and selective disclosure.
 
