@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status:** Phase 1B broadcast infrastructure is implemented and ready for external configuration. Icecast, the FFmpeg worker, deterministic media queue, fallback/test-tone path, durable broadcast sessions/events, and API/frontend state synchronization are included. Licensed media, production secrets, and public routing remain operator configuration.
+> **Status:** Phase 1 is externally operational. The BlockTek Docker stack is continuously broadcasting the supplied real MP3 library through private Icecast, Nginx, and HTTPS. The production API reports real `LIVE` and now-playing state. AI DJ and Midnight remain intentionally unconfigured until Phase 2 and later.
 
 ## Vision and Problem
 
@@ -12,7 +12,7 @@ The project does not make an absolute anonymity claim. Browsers, network infrast
 
 ## Current Status
 
-Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. The worker refuses to claim a broadcast when configuration or media is missing.
+Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. The production instance is configured at `https://blocktek-radio.duckdns.org`; the Vercel frontend is `https://blockteck-radio.vercel.app/`.
 
 The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. `RADIO_STREAM_URL` is optional, AI uses an explicitly labelled development fallback without provider credentials, and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
 
@@ -31,6 +31,9 @@ Midnight is the privacy boundary for contributor credentials, eligibility assert
 - Shared TypeScript packages contain domain types, Zod validation, radio queue rules, AI adapters, and the Midnight integration boundary.
 - Docker Compose runs isolated web, API, worker, PostgreSQL, Redis, and Icecast services with loopback-only web/API bindings; API startup applies the radio migrations.
 - The worker discovers operator-managed media, applies deterministic queue/programme selection, streams through FFmpeg to private Icecast, persists broadcast sessions/events, and shuts down cleanly.
+- Production media is discovered from the seven supplied MP3 files in `media/music/`; FFmpeg uses their probed durations for track transitions and Icecast source metadata identifies `BlockTek Radio`.
+- The public HTTPS stream at `/stream` proxies privately to Icecast `/live`; the public API reports the same canonical listener URL and current persisted broadcast item.
+- The production CORS policy allows the exact Vercel origin for API and stream requests; no server credentials are exposed to the browser.
 - Empty or invalid media does not produce a false `LIVE` state. Operators can explicitly enable a generated 440 Hz test tone for internal stream checks.
 
 ## Architecture
@@ -85,7 +88,7 @@ packages/ai/               AI provider abstraction
 packages/midnight/         Midnight adapter boundary
 contracts/midnight/        Compact integration boundary
 infrastructure/docker/     Production container definitions
-infrastructure/nginx/      Disabled reverse-proxy template
+infrastructure/nginx/      BlockTek reverse-proxy configuration and disabled template
 media/                     Operator-managed audio mount; media is not committed
 ```
 
@@ -128,6 +131,40 @@ The worker scans supported files in deterministic filename order, loops the FFmp
 
 `docker-compose.dev.yml` starts only project-scoped PostgreSQL and Redis for local dependency work. Only BlockTek-owned database, Redis, provider, stream, authentication, Icecast, and Midnight configuration belongs in `.env`.
 
+## Production URLs and operations
+
+The verified production topology is:
+
+```text
+https://blockteck-radio.vercel.app/
+        -> https://blocktek-radio.duckdns.org/api/v1/...
+        -> 127.0.0.1:4010 -> Fastify API
+
+https://blocktek-radio.duckdns.org/stream
+        -> 127.0.0.1:8000/live -> private Docker Icecast
+```
+
+The canonical public stream URL is `https://blocktek-radio.duckdns.org/stream`; the internal Icecast mount remains `/live`. The BlockTek Compose services are `web`, `api`, `worker`, `postgres`, `redis`, and `icecast`. Web, API, and Icecast publish only loopback ports `3010`, `4010`, and `8000`; PostgreSQL and Redis have no host port publication.
+
+Production configuration uses `NEXT_PUBLIC_API_BASE_URL=https://blocktek-radio.duckdns.org` (the existing client convention expects an origin and appends `/api/v1/...`), `WEB_BASE_URL=https://blockteck-radio.vercel.app`, `RADIO_PUBLIC_STREAM_URL=https://blocktek-radio.duckdns.org/stream`, `RADIO_STREAM_ENABLED=true`, and `RADIO_BROADCAST_ENABLED=true`. `ICECAST_CORS_ORIGIN` is restricted to the Vercel origin. Secret values remain only in the root `.env`, which must stay mode `0600` and must never be committed.
+
+The dedicated Nginx file is `infrastructure/nginx/blocktek-radio.duckdns.org.conf`. It redirects HTTP to HTTPS, serves the ACME challenge, proxies `/api/` to Fastify, proxies only `/stream` to Icecast `/live`, and sends other website traffic to the local Next.js service. PostgreSQL, Redis, and Icecast administration are not public routes. The VPS certificate is issued by Let's Encrypt and is renewed by Certbot.
+
+Useful operator commands:
+
+```bash
+chmod 600 .env
+docker compose config
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 worker icecast api
+curl -fsS https://blocktek-radio.duckdns.org/api/v1/health
+curl -fsS https://blocktek-radio.duckdns.org/api/v1/radio/status
+curl -fsS https://blocktek-radio.duckdns.org/api/v1/radio/now-playing
+```
+
+For controlled recovery, restart only the affected BlockTek service: `docker compose restart worker` or `docker compose restart icecast`. The worker is configured to exit when FFmpeg loses Icecast so Docker can restart it and establish a fresh persisted session. If the stream is `OFFLINE`, first check `docker compose ps`, worker/Icecast logs, the media bind path, and `RADIO_BROADCAST_ENABLED`; never enable the test tone as a production substitute for real media.
+
 ## Tests and API
 
 ```bash
@@ -163,21 +200,21 @@ Endpoints currently include:
 
 The contribution flow is development-only and currently lacks authentication, encryption, evidence storage, rate limiting, and durable persistence. Do not submit real sensitive information. The intended disclosure policy reveals eligibility only and hides name, email, location, wallet, organisation, and other identity fields. Editorial review remains a human-controlled boundary for allegations, moderation, and approval to broadcast.
 
-Icecast source, admin, relay, database, Redis, and provider credentials are server-side only. The browser receives only the public listener URL and API read models. Icecast is not publicly exposed by the Compose stack; the eventual route should be `radio domain -> Nginx -> Icecast`, with the API routed separately.
+Icecast source, admin, relay, database, Redis, and provider credentials are server-side only. The browser receives only the public listener URL and API read models. Icecast is not directly public: the route is `radio domain -> Nginx -> private Icecast`, with the API routed separately. API CORS is limited to `https://blockteck-radio.vercel.app`; the stream response uses the same exact origin rather than a wildcard.
 
 ## Deployment
 
-BlockTek Radio runs as an isolated application stack on a shared VPS. Docker Compose uses its own project/network namespace, loopback-only web/API bindings, and private PostgreSQL/Redis/Icecast services without reusing existing tenant-owned dependencies. No production Nginx route, domain, or TLS certificate is configured. DNS, TLS, firewall, backups, media licensing, and production secret provisioning require an independent deployment review.
+BlockTek Radio runs as an isolated application stack on a shared VPS. Docker Compose uses its own project/network namespace, loopback-only web/API/Icecast bindings, bounded worker/Icecast resources, and private PostgreSQL/Redis services without reusing existing tenant-owned dependencies. `blocktek-radio.duckdns.org` resolves to `89.116.31.3`, and the dedicated Nginx virtual host terminates the Let's Encrypt certificate and provides the API/stream routes. The Vercel production environment contains only the public `NEXT_PUBLIC_API_BASE_URL` value.
 
 ## Roadmap
 
 ### Completed: Phases 0, 0.5, 1, and 1B
 
-Foundation, isolated VPS/Compose boundaries, PostgreSQL radio persistence, schedule/queue APIs, native browser playback, private Icecast, FFmpeg continuous audio, deterministic scheduling, filesystem media management, fallback/test tone, durable broadcast sessions/events, health/readiness reporting, and real now-playing synchronization are implemented.
+Foundation, isolated VPS/Compose boundaries, PostgreSQL radio persistence, schedule/queue APIs, native browser playback, private Icecast, FFmpeg continuous audio, deterministic scheduling, filesystem media management, fallback/test tone, duration-aware real-media transitions, durable broadcast sessions/events, health/readiness reporting, public Nginx/TLS routing, Vercel API configuration, and real now-playing synchronization are implemented and externally verified.
 
-### Next: external broadcast configuration
+### Next: Phase 1 operational hardening
 
-Provide licensed/project-owned media, production Postgres and Icecast secrets, a public stream URL, DNS/TLS/Nginx routing, backups, and resource/log monitoring. The station must not be labelled production-live until these are configured and verified.
+Add operator-supplied fallback/jingle audio to the currently empty fallback directories, formalize backups and log retention, and add external uptime/stream monitoring. The primary seven-file licensed/project-owned music library is already active. Keep browser Play verification in the release checklist after frontend changes.
 
 ### Phase 2: AI DJ & Intelligent Programming
 

@@ -76,7 +76,7 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
     version: "v1",
     mode: config.DATABASE_URL ? "production" : "development",
     integrations: {
-      radioStream: Boolean(config.RADIO_STREAM_ENABLED && config.RADIO_STREAM_URL),
+      radioStream: Boolean(config.RADIO_STREAM_ENABLED && (config.RADIO_PUBLIC_STREAM_URL || config.RADIO_STREAM_URL)),
       aiProvider: config.AI_PROVIDER,
       midnight: midnight.status().status,
       broadcast: config.RADIO_BROADCAST_ENABLED ? "enabled" : "not-configured",

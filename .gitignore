@@ -12,6 +12,15 @@ __v0_jsx-dev-runtime.ts
 !.env.example
 .env*.local
 
+# Operator-supplied broadcast media stays on the host and out of Git.
+media/**/*.mp3
+media/**/*.ogg
+media/**/*.opus
+media/**/*.wav
+media/**/*.flac
+media/**/*.m4a
+media/**/*.aac
+
 # Common ignores
 node_modules
 .next/

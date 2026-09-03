@@ -66,7 +66,7 @@ export function radioStatusForStream(stream: Pick<Stream, "enabled" | "url" | "h
   return "CONNECTING"
 }
 
-export type BroadcastQueueItem = BroadcastCurrentItem & { path: string }
+export type BroadcastQueueItem = BroadcastCurrentItem & { path: string; durationSeconds?: number }
 
 export interface BroadcastQueueProvider {
   next(): Promise<BroadcastQueueItem | null>
