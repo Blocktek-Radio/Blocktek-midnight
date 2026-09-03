@@ -13,10 +13,18 @@ export class BroadcastStore {
     return id
   }
 
+  async syncMediaAssets(items: BroadcastQueueItem[]) {
+    for (const item of items.filter((candidate) => !candidate.path.startsWith("tone://"))) {
+      await this.sql`INSERT INTO media_assets (id, title, artist, album, path, kind, duration_seconds, artwork_url, enabled)
+        VALUES (${item.id}, ${item.title}, ${item.artist}, ${item.album}, ${item.path}, ${item.source}, ${item.durationSeconds ? Math.round(item.durationSeconds) : null}, ${item.artworkUrl}, true)
+        ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, artist = EXCLUDED.artist, album = EXCLUDED.album, path = EXCLUDED.path, kind = EXCLUDED.kind, duration_seconds = EXCLUDED.duration_seconds, artwork_url = EXCLUDED.artwork_url, enabled = true, updated_at = now()`
+    }
+  }
+
   async event(sessionId: string, eventType: string, item: BroadcastQueueItem | null, error?: string) {
     const id = `event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const metadata = item ? { id: item.id, title: item.title, artist: item.artist, album: item.album, artworkUrl: item.artworkUrl, programme: item.programme, source: item.source } : {}
-    await this.sql`INSERT INTO broadcast_events (id, session_id, event_type, metadata, started_at) VALUES (${id}, ${sessionId}, ${eventType}, ${this.sql.json(metadata)}, now())`
+    await this.sql`INSERT INTO broadcast_events (id, session_id, media_asset_id, event_type, metadata, started_at) VALUES (${id}, ${sessionId}, ${item?.path.startsWith("tone://") ? null : item?.id || null}, ${eventType}, ${this.sql.json(metadata)}, now())`
     if (error) await this.sql`UPDATE broadcast_sessions SET status = 'DEGRADED', last_error = ${error.slice(0, 500)}, updated_at = now() WHERE id = ${sessionId}`
   }
 

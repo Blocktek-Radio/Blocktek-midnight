@@ -28,6 +28,7 @@ async function run() {
   await writeFile(playlistPath, items.filter((item) => !item.path.startsWith("tone://")).map((item) => `file '${item.path.replaceAll("'", "'\\''")}'`).join("\n"))
 
   const store = new BroadcastStore(env.DATABASE_URL)
+  await store.syncMediaAssets(items)
   const sessionId = await store.startSession(env.RADIO_STATION_ID || "blocktek-main", mount)
   const runtime: Runtime = { process: null, stopping: false, sessionId, store, currentIndex: -1, itemTimer: null }
 
