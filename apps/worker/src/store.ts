@@ -13,6 +13,10 @@ export class BroadcastStore {
     return id
   }
 
+  async recoverAiQueue() {
+    await this.sql`UPDATE ai_programming_queue SET status = 'PENDING' WHERE status = 'PLAYING'`
+  }
+
   async syncMediaAssets(items: BroadcastQueueItem[]) {
     for (const item of items.filter((candidate) => !candidate.path.startsWith("tone://"))) {
       await this.sql`INSERT INTO media_assets (id, title, artist, album, path, kind, duration_seconds, artwork_url, enabled)

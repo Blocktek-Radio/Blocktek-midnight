@@ -20,7 +20,7 @@ async function run() {
   if (!env.DATABASE_URL || !env.ICECAST_SOURCE_PASSWORD || !env.ICECAST_HOST) { log("broadcast not configured", { reason: "DATABASE_URL, ICECAST_SOURCE_PASSWORD, and ICECAST_HOST are required" }); return }
   const mediaRoot = env.MEDIA_ROOT || "/opt/blocktek-radio/media"; await mkdir(mediaRoot, { recursive: true })
   const items = await discoverMedia(mediaRoot, env.FALLBACK_AUDIO_PATH, bool(env.RADIO_TEST_TONE_ENABLED)); if (!items.length) { log("no media configured", { mediaRoot }); return }
-  const store = new BroadcastStore(env.DATABASE_URL); await store.syncMediaAssets(items); const mount = env.ICECAST_MOUNT || "/live"; const sessionId = await store.startSession(env.RADIO_STATION_ID || "blocktek-main", mount)
+  const store = new BroadcastStore(env.DATABASE_URL); await store.syncMediaAssets(items); await store.recoverAiQueue(); const mount = env.ICECAST_MOUNT || "/live"; const sessionId = await store.startSession(env.RADIO_STATION_ID || "blocktek-main", mount)
   const sourceUrl = `icecast://${encodeURIComponent(env.ICECAST_SOURCE_USER || "source")}:${encodeURIComponent(env.ICECAST_SOURCE_PASSWORD)}@${env.ICECAST_HOST}:${env.ICECAST_PORT || "8000"}${mount}`
   let stopping = false; let currentIndex = -1
   const nextItem = async () => { const aiItem = await store.claimNextAiItem(); if (aiItem) return aiItem; currentIndex = (currentIndex + 1) % items.length; const programmeTitle = await store.currentProgrammeTitle(); return selectBroadcastItem(programmeTitle ? { startTime: "", endTime: "", title: programmeTitle } : null, items[currentIndex], null) }

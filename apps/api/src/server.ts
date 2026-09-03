@@ -47,7 +47,7 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
   }))
   const streamProbe = dependencies.streamProbe
   const streamCache = new Map<string, { stream: Stream; expiresAt: number }>()
-  const aiService = new AiProgrammingService({ manager: createAiProviderManager(process.env), timeoutMs: config.AI_TIMEOUT_MS, mode: config.AI_PROGRAMMING_MODE })
+  const aiService = new AiProgrammingService({ manager: config.AI_PROGRAMMING_MODE === "DETERMINISTIC" ? undefined : createAiProviderManager(process.env), timeoutMs: config.AI_TIMEOUT_MS, mode: config.AI_PROGRAMMING_MODE })
   const memoryDecisions: AiDecision[] = []
   const decisionStore = dependencies.aiDecisionStore || { save: async (decision: AiDecision) => { memoryDecisions.unshift(decision); memoryDecisions.splice(20) }, list: async (limit = 20) => memoryDecisions.slice(0, limit), get: async (id: string) => memoryDecisions.find((item) => item.id === id) || null }
 
@@ -145,7 +145,9 @@ export function buildServer(config: ApiConfig = loadConfig(), dependencies: Serv
     const queue = await radioRepository.getQueue(8)
     const media = await radioRepository.getMediaAssets()
     const context: BroadcastContext = { now: new Date().toISOString(), currentProgramme: nowPlaying.programme?.title || null, currentTrackId: nowPlaying.track?.id || null, recentTrackIds: nowPlaying.track ? [nowPlaying.track.id] : [], recentArtists: nowPlaying.track ? [nowPlaying.track.artist.name] : [], upcomingTrackIds: queue.map((item) => item.track.id).slice(0, 8), availableMedia: media.map(({ id, title, artist, album, durationSeconds, genre, mood, kind, enabled, programmeEligible }) => ({ id, title, artist, album, durationSeconds, genre, mood, kind, enabled, programmeEligible })), station: defaultStationProfile, mode: config.AI_PROGRAMMING_MODE, request: input }
-    const result = await aiService.generate(context)
+    const result = config.AI_PROGRAMMING_MODE === "DETERMINISTIC"
+      ? await aiService.generate({ ...context, mode: "DETERMINISTIC" })
+      : await aiService.generate(context)
     await decisionStore.save(result.decision, contextHash(context))
     if (result.status === "AI_GENERATED") await decisionStore.enqueue?.(result.decision.id, result.acceptedMediaIds, input.theme)
     return result
