@@ -44,6 +44,45 @@ export const generatedProgrammeSchema = programmeRequestSchema.extend({
 })
 export type GeneratedProgramme = z.infer<typeof generatedProgrammeSchema>
 
+export const aiStatuses = ["AI_NOT_CONFIGURED", "AI_AVAILABLE", "AI_UNAVAILABLE", "AI_GENERATING", "AI_GENERATED", "AI_VALIDATION_FAILED", "AI_FALLBACK"] as const
+export const aiStatusSchema = z.enum(aiStatuses)
+export type AiStatus = z.infer<typeof aiStatusSchema>
+export const programmingModes = ["DETERMINISTIC", "AI_ASSISTED", "AI_PROGRAMMED"] as const
+export const programmingModeSchema = z.enum(programmingModes)
+export type ProgrammingMode = z.infer<typeof programmingModeSchema>
+
+export type MediaAsset = {
+  id: string
+  title: string
+  artist: string
+  album: string | null
+  path: string
+  kind: string
+  durationSeconds: number | null
+  artworkUrl: string | null
+  genre?: string | null
+  mood?: string | null
+  explicit?: boolean
+  programmeEligible?: boolean
+  enabled: boolean
+}
+
+export type AiDecision = {
+  id: string
+  requestType: string
+  provider: string | null
+  model: string | null
+  validationStatus: "ACCEPTED" | "REJECTED" | "FALLBACK"
+  rejectionReason: string | null
+  explanation: string
+  proposal: unknown
+  latencyMs: number
+  createdAt: string
+  fallbackProvider?: string | null
+  approvedMediaIds?: string[]
+  mode?: ProgrammingMode
+}
+
 export const radioStatuses = ["LIVE", "CONNECTING", "OFFLINE", "NOT_CONFIGURED"] as const
 export const radioStatusSchema = z.enum(radioStatuses)
 export type RadioStatus = z.infer<typeof radioStatusSchema>

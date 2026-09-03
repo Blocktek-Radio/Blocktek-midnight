@@ -12,6 +12,7 @@ import type {
   Station,
   Stream,
   Track,
+  MediaAsset,
 } from "@blocktek/types"
 
 export type RadioRepositoryHealth = {
@@ -27,6 +28,7 @@ export interface RadioRepository {
   getProgrammes(): Promise<Programme[]>
   getSchedule(from?: Date, to?: Date): Promise<Schedule[]>
   getBroadcastState(): Promise<BroadcastState>
+  getMediaAssets(): Promise<MediaAsset[]>
   health(): Promise<RadioRepositoryHealth>
   close(): Promise<void>
 }
@@ -242,6 +244,10 @@ export class InMemoryRadioRepository implements RadioRepository {
         checkedAt: new Date().toISOString(),
       },
     }
+  }
+
+  async getMediaAssets(): Promise<MediaAsset[]> {
+    return this.seed.tracks.map((track) => ({ id: track.id, title: track.title, artist: track.artist.name, album: track.album?.title || null, path: "", kind: "music", durationSeconds: track.durationSeconds, artworkUrl: track.artworkUrl, enabled: true, programmeEligible: true }))
   }
 
   async health(): Promise<RadioRepositoryHealth> {

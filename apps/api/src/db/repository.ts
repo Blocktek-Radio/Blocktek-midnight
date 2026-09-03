@@ -2,7 +2,7 @@ import { asc, eq, and, gte, lte, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import { radioStatusForStream, type RadioRepository, type RadioRepositoryHealth, withProgrammeStatus, orderQueue } from "@blocktek/radio-core"
-import type { Album, Artist, BroadcastCurrentItem, BroadcastState, Channel, NowPlaying, Playlist, Programme, QueueItem, Schedule, Station, Stream, Track } from "@blocktek/types"
+import type { AiDecision, Album, Artist, BroadcastCurrentItem, BroadcastState, Channel, MediaAsset, NowPlaying, Playlist, Programme, QueueItem, Schedule, Station, Stream, Track } from "@blocktek/types"
 import * as schema from "./schema.js"
 
 export type StreamConfiguration = {
@@ -180,6 +180,11 @@ export class PostgresRadioRepository implements RadioRepository {
     return orderQueue(playlist.items.map((item) => ({ position: item.position, track: item.track, scheduledAt: null })), limit)
   }
 
+  async getMediaAssets(): Promise<MediaAsset[]> {
+    const rows = await this.db.select().from(schema.mediaAssets).where(eq(schema.mediaAssets.enabled, true)).orderBy(asc(schema.mediaAssets.title))
+    return rows.map((row) => ({ id: row.id, title: row.title, artist: row.artist, album: row.album, path: row.path, kind: row.kind, durationSeconds: row.durationSeconds, artworkUrl: row.artworkUrl, enabled: row.enabled, programmeEligible: true }))
+  }
+
   async getProgrammes(): Promise<Programme[]> {
     const rows = await this.db.select({
       id: schema.programmes.id,
@@ -296,6 +301,17 @@ export class PostgresRadioRepository implements RadioRepository {
     await this.client.end({ timeout: 5 })
   }
 }
+
+export interface AiDecisionStore { save(decision: AiDecision, contextHash: string): Promise<void>; enqueue?(decisionId: string, mediaIds: string[], programmeTitle: string): Promise<void>; list(limit?: number): Promise<AiDecision[]>; get(id: string): Promise<AiDecision | null> }
+
+export class PostgresAiDecisionStore implements AiDecisionStore {
+  constructor(private readonly sql: postgres.Sql) {}
+  async save(decision: AiDecision, contextHash: string) { await this.sql`INSERT INTO ai_programming_decisions (id, request_type, provider, model, input_context_hash, proposal, validation_status, rejection_reason, explanation, latency_ms, created_at) VALUES (${decision.id}, ${decision.requestType}, ${decision.provider}, ${decision.model}, ${contextHash}, ${this.sql.json(JSON.parse(JSON.stringify(decision.proposal)) as any)}, ${decision.validationStatus}, ${decision.rejectionReason}, ${decision.explanation}, ${decision.latencyMs}, ${decision.createdAt})` }
+  async enqueue(decisionId: string, mediaIds: string[], programmeTitle: string) { for (const [position, mediaId] of mediaIds.entries()) await this.sql`INSERT INTO ai_programming_queue (decision_id, media_asset_id, programme_title, position, status) VALUES (${decisionId}, ${mediaId}, ${programmeTitle}, ${position + 1}, 'PENDING') ON CONFLICT (decision_id, position) DO NOTHING` }
+  async list(limit = 20) { const rows = await this.sql<any[]>`SELECT * FROM ai_programming_decisions ORDER BY created_at DESC LIMIT ${Math.min(limit, 100)}`; return rows.map(mapDecision) }
+  async get(id: string) { const [row] = await this.sql<any[]>`SELECT * FROM ai_programming_decisions WHERE id = ${id} LIMIT 1`; return row ? mapDecision(row) : null }
+}
+function mapDecision(row: any): AiDecision { return { id: row.id, requestType: row.request_type, provider: row.provider, model: row.model, validationStatus: row.validation_status, rejectionReason: row.rejection_reason, explanation: row.explanation, proposal: row.proposal, latencyMs: row.latency_ms, createdAt: new Date(row.created_at).toISOString() } }
 
 export function createPostgresRadioRepository(databaseUrl: string, streamConfiguration: StreamConfiguration): PostgresRadioRepository {
   return new PostgresRadioRepository(databaseUrl, streamConfiguration)

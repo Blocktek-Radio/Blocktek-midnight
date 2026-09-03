@@ -5,21 +5,25 @@ import { useState } from "react"
 import { apiFetch } from "@/lib/api"
 
 type Programme = { title: string; introduction: string; source: string; tracks: { title: string; artist: string }[]; selectionMetadata: { overallSelectionScore: number } }
+type AiStatus = { status: string; provider: string | null; model: string | null; mode: string }
 
 export function AiDjConsole() {
   const [form, setForm] = useState({ theme: "Web3 Builders", mood: "Late Night", durationMinutes: 30, audience: "Developers" })
   const [result, setResult] = useState<Programme | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<AiStatus | null>(null)
+  const [explanation, setExplanation] = useState<string | null>(null)
+  useState(() => { apiFetch<{ data: AiStatus }>("/api/v1/ai/status").then((response) => setStatus(response.data)).catch(() => setStatus({ status: "AI_UNAVAILABLE", provider: null, model: null, mode: "DETERMINISTIC" })) })
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setLoading(true); setError(null)
-    try { setResult((await apiFetch<{ data: Programme }>("/api/v1/ai/programmes", { method: "POST", body: JSON.stringify(form) })).data) }
+    try { const response = await apiFetch<{ data: Programme; aiStatus: string; decision?: { explanation: string } }>("/api/v1/ai/programmes", { method: "POST", body: JSON.stringify(form) }); setResult(response.data); setExplanation(response.decision?.explanation || null); setStatus((current) => current ? { ...current, status: response.aiStatus } : current) }
     catch { setError("AI service unavailable. Check the API status and provider configuration.") }
     finally { setLoading(false) }
   }
   return <div className="grid gap-px border border-border bg-border lg:grid-cols-12">
     <form onSubmit={submit} className="space-y-5 bg-background p-6 md:p-8 lg:col-span-5">
-      <div className="flex items-center gap-3 border-b border-border pb-5"><Bot className="h-5 w-5 text-accent" /><div><p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">AI DJ / programme builder</p><p className="text-sm font-semibold">Create a programme</p></div></div>
+      <div className="flex items-center gap-3 border-b border-border pb-5"><Bot className="h-5 w-5 text-accent" /><div><p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">AI DJ / {status?.status || "CHECKING"}</p><p className="text-sm font-semibold">Create a programme</p></div></div>
       {(["theme", "mood", "audience"] as const).map((key) => <label key={key} className="block"><span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{key}</span><input value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} className="mt-2 block w-full border border-border bg-secondary px-3 py-3 text-sm outline-none focus:border-accent" /></label>)}
       <label className="block"><span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Duration / minutes</span><input type="number" min={5} max={180} value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })} className="mt-2 block w-full border border-border bg-secondary px-3 py-3 text-sm outline-none focus:border-accent" /></label>
       <button type="submit" disabled={loading} className="inline-flex w-full items-center justify-center gap-2 bg-foreground px-4 py-3 text-sm font-medium text-background disabled:opacity-60">{loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}Generate programme</button>

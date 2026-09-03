@@ -1,58 +1,49 @@
-import { generatedProgrammeSchema, type GeneratedProgramme, type ProgrammeRequest } from "@blocktek/types"
-import { takeUntilDuration } from "@blocktek/radio-core"
+import { createHash, randomUUID } from "node:crypto"
+import { generatedProgrammeSchema, type AiDecision, type AiStatus, type GeneratedProgramme, type MediaAsset, type ProgrammeRequest } from "@blocktek/types"
+import { z } from "zod"
 
-type Provider = {
-  generateProgramme(request: ProgrammeRequest): Promise<GeneratedProgramme>
+export type ProviderHealth = { name: string; model: string | null; configured: boolean; available: boolean; lastError: string | null; checkedAt: string | null }
+export type StationProfile = { name: string; description: string; mission: string; tone: string; programmingStyle: string; contentRules: string[]; repeatCooldownMinutes: number; artistCooldownMinutes: number }
+export const defaultStationProfile: StationProfile = { name: "BlockTek Radio", description: "A privacy-first station for decentralized audio and community programming.", mission: "Connect reliable broadcasting with intelligent, transparent programming.", tone: "Independent, intelligent, modern, technology-aware.", programmingStyle: "Interesting sequencing, low repetition, context-aware programming.", contentRules: ["Only enabled and programme-eligible media may be selected.", "Never expose private contributor information."], repeatCooldownMinutes: 90, artistCooldownMinutes: 45 }
+export type BroadcastContext = { now: string; currentProgramme: string | null; currentTrackId: string | null; recentTrackIds: string[]; recentArtists: string[]; upcomingTrackIds: string[]; availableMedia: Array<Pick<MediaAsset, "id" | "title" | "artist" | "album" | "durationSeconds" | "genre" | "mood" | "kind"> & { enabled?: boolean; programmeEligible?: boolean }>; station: StationProfile; mode: string; request: ProgrammeRequest }
+export type ProviderResult = { raw: unknown; provider: string; model: string | null }
+export interface AiProvider { readonly name: string; readonly model: string | null; healthCheck?: () => Promise<ProviderHealth>; generate(context: BroadcastContext, timeoutMs: number): Promise<ProviderResult> }
+
+export const proposalSchema = z.object({ programmeType: z.enum(["MUSIC", "PODCAST", "MIXED"]), mood: z.string().trim().min(1).max(80), reason: z.string().trim().min(1).max(500), items: z.array(z.object({ mediaId: z.string().min(1).max(120), position: z.number().int().positive(), reason: z.string().trim().min(1).max(240) })).min(1).max(8) }).strict()
+export type ValidatedProposal = z.infer<typeof proposalSchema>
+
+async function postJson(url: string, apiKey: string, body: unknown, timeoutMs: number): Promise<unknown> {
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try { const response = await fetch(url, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify(body) }); if (!response.ok) throw new Error(`provider returned HTTP ${response.status}`); return await response.json() } finally { clearTimeout(timer) }
 }
 
-const catalogue = [
-  { id: "track-001", title: "Night Signal", artist: "BlockTek Radio Library", durationSeconds: 214 },
-  { id: "track-002", title: "Proof of Sound", artist: "BlockTek Radio Library", durationSeconds: 246 },
-  { id: "track-003", title: "Open Frequency", artist: "BlockTek Radio Library", durationSeconds: 188 },
-  { id: "track-004", title: "Relay State", artist: "BlockTek Radio Library", durationSeconds: 271 },
-]
-
-export class DevelopmentAiProvider implements Provider {
-  async generateProgramme(request: ProgrammeRequest): Promise<GeneratedProgramme> {
-    const tracks = takeUntilDuration(catalogue, request.durationMinutes)
-    return generatedProgrammeSchema.parse({
-      ...request,
-      title: `${request.theme} / ${request.mood}`,
-      tracks,
-      introduction: `A development programme for ${request.audience}, shaped around ${request.theme}.`,
-      selectionMetadata: {
-        themeRelevance: 0,
-        listenerPreferenceMatch: 0,
-        freshness: 0,
-        overallSelectionScore: 0,
-      },
-      source: "development-fallback",
-    })
-  }
+export class OpenAiCompatibleProvider implements AiProvider {
+  constructor(public readonly name: string, private readonly url: string, private readonly apiKey: string, public readonly model: string) {}
+  async healthCheck(): Promise<ProviderHealth> { try { await postJson(this.url, this.apiKey, { model: this.model, messages: [{ role: "user", content: "Return JSON: {\"ok\":true}" }], max_tokens: 8, temperature: 0 }, 8000); return { name: this.name, model: this.model, configured: true, available: true, lastError: null, checkedAt: new Date().toISOString() } } catch (error) { return { name: this.name, model: this.model, configured: true, available: false, lastError: error instanceof Error ? error.message.slice(0, 200) : "provider unavailable", checkedAt: new Date().toISOString() } } }
+  async generate(context: BroadcastContext, timeoutMs: number): Promise<ProviderResult> { const body = await postJson(this.url, this.apiKey, { model: this.model, temperature: 0.2, max_tokens: 700, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You are BlockTek Radio's programming assistant. Return only the requested JSON. Select only media IDs from the supplied catalogue. Never invent IDs, commands, URLs, paths, SQL, or private data." }, { role: "user", content: JSON.stringify(context) }] }, timeoutMs) as { choices?: Array<{ message?: { content?: string } }> }; const content = body.choices?.[0]?.message?.content; return { raw: content ? JSON.parse(content) : body, provider: this.name, model: this.model } }
 }
 
-export class OpenAiCompatibleProvider implements Provider {
-  constructor(private readonly url: string, private readonly apiKey: string) {}
+export class DemoProvider implements AiProvider { readonly name = "development-demo"; readonly model = null; async healthCheck(): Promise<ProviderHealth> { return { name: this.name, model: null, configured: false, available: false, lastError: "demo provider is not production AI", checkedAt: new Date().toISOString() } } async generate(): Promise<ProviderResult> { throw new Error("demo provider is not a production provider") } }
 
-  async generateProgramme(request: ProgrammeRequest): Promise<GeneratedProgramme> {
-    const response = await fetch(this.url, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ task: "generate-programme", request }),
-    })
-    if (!response.ok) throw new Error(`AI provider returned HTTP ${response.status}`)
-    return generatedProgrammeSchema.parse(await response.json())
-  }
+export class AiProviderManager {
+  private healthCache: { expiresAt: number; primary: ProviderHealth; fallback: ProviderHealth } | null = null
+  constructor(private readonly primary?: AiProvider, private readonly fallback?: AiProvider) {}
+  configured() { return Boolean(this.primary || this.fallback) }
+  async health(): Promise<{ primary: ProviderHealth; fallback: ProviderHealth }> { if (this.healthCache && this.healthCache.expiresAt > Date.now()) return this.healthCache; const [primary, fallback] = await Promise.all([this.primary?.healthCheck ? this.primary.healthCheck() : undefined, this.fallback?.healthCheck ? this.fallback.healthCheck() : undefined]); const result = { primary: primary || { name: this.primary?.name || "ASI Cloud", model: this.primary?.model || null, configured: Boolean(this.primary), available: Boolean(this.primary), lastError: this.primary ? "health check not implemented" : "not configured", checkedAt: new Date().toISOString() }, fallback: fallback || { name: this.fallback?.name || "Groq", model: this.fallback?.model || null, configured: Boolean(this.fallback), available: Boolean(this.fallback), lastError: this.fallback ? "health check not implemented" : "not configured", checkedAt: new Date().toISOString() } }; this.healthCache = { ...result, expiresAt: Date.now() + 30_000 }; return result }
+  async generate(context: BroadcastContext, timeoutMs: number): Promise<{ result: ProviderResult; fallbackReason: string | null }> { let primaryError: string | null = null; if (this.primary) { try { return { result: await this.primary.generate(context, timeoutMs), fallbackReason: null } } catch (error) { primaryError = error instanceof Error ? error.message.slice(0, 200) : "primary provider failed" } } if (this.fallback) { try { return { result: await this.fallback.generate(context, timeoutMs), fallbackReason: primaryError || "primary provider not configured" } } catch (error) { throw new Error(`primary failed: ${primaryError || "not configured"}; fallback failed: ${error instanceof Error ? error.message.slice(0, 200) : "provider unavailable"}`) } } throw new Error(primaryError || "no AI provider configured") }
 }
 
-export function createAiProvider(env: NodeJS.ProcessEnv): Provider {
-  if (env.AI_PROVIDER === "openai-compatible" && env.AI_PROVIDER_URL && env.AI_PROVIDER_API_KEY) {
-    return new OpenAiCompatibleProvider(env.AI_PROVIDER_URL, env.AI_PROVIDER_API_KEY)
-  }
-  return new DevelopmentAiProvider()
+export type AiServiceOptions = { manager?: AiProviderManager; provider?: AiProvider; timeoutMs?: number; profile?: StationProfile; mode?: "DETERMINISTIC" | "AI_ASSISTED" | "AI_PROGRAMMED" }
+export class AiProgrammingService {
+  constructor(private readonly options: AiServiceOptions = {}) {}
+  async status(): Promise<{ status: AiStatus; enabled: boolean; mode: string; primaryProvider: ProviderHealth; fallbackProvider: ProviderHealth }> { const manager = this.options.manager || (this.options.provider ? new AiProviderManager(this.options.provider) : undefined); const health = await (manager?.health() || { primary: unavailable("ASI Cloud"), fallback: unavailable("Groq") }); const enabled = health.primary.configured || health.fallback.configured; return { status: !enabled ? "AI_NOT_CONFIGURED" : health.primary.available || health.fallback.available ? "AI_AVAILABLE" : "AI_UNAVAILABLE", enabled, mode: this.options.mode || "DETERMINISTIC", primaryProvider: health.primary, fallbackProvider: health.fallback } }
+  async generate(context: BroadcastContext) { const started = Date.now(); const manager = this.options.manager || (this.options.provider ? new AiProviderManager(this.options.provider) : undefined); if (!manager?.configured()) return this.fallback(context, started, "AI providers are not configured", null); try { const generated = await manager.generate(context, this.options.timeoutMs || 12000); const proposal = proposalSchema.parse(normalizeProposal(generated.result.raw, context.request)); const selected = validateProposal(proposal, context); if (!selected.length) throw new Error("policy rejected proposal: no eligible media after cooldown and duplicate checks"); const programme = generatedProgrammeSchema.parse({ ...context.request, title: `${context.request.theme} / ${proposal.mood}`, tracks: selected.map((item) => ({ id: item.media.id, title: item.media.title, artist: item.media.artist, durationSeconds: item.media.durationSeconds || 1 })), introduction: proposal.reason, selectionMetadata: { themeRelevance: 0.5, listenerPreferenceMatch: 0.5, freshness: 1, overallSelectionScore: 0.5 }, source: "provider" }); return { status: "AI_GENERATED" as const, programme, acceptedMediaIds: selected.map((item) => item.media.id), decision: decision(generated.result, generated.fallbackReason, proposal, started, "ACCEPTED", proposal.reason) } } catch (error) { return this.fallback(context, started, error instanceof Error ? error.message.slice(0, 500) : "AI generation failed", manager) } }
+  private fallback(context: BroadcastContext, started: number, reason: string, manager: AiProviderManager | null) { const tracks: typeof context.availableMedia = []; let total = 0; for (const media of context.availableMedia.filter((item) => item.enabled !== false && item.programmeEligible !== false)) { const duration = media.durationSeconds || 1; if (tracks.length && total + duration > context.request.durationMinutes * 60) break; tracks.push(media); total += duration; if (tracks.length >= 8) break } const programme = generatedProgrammeSchema.parse({ ...context.request, title: `${context.request.theme} / deterministic fallback`, tracks: tracks.map((item) => ({ id: item.id, title: item.title, artist: item.artist, durationSeconds: item.durationSeconds || 1 })), introduction: `Deterministic fallback: ${reason}.`, selectionMetadata: { themeRelevance: 0, listenerPreferenceMatch: 0, freshness: 1, overallSelectionScore: 0 }, source: "development-fallback" }); return { status: "AI_FALLBACK" as const, programme, acceptedMediaIds: tracks.map((item) => item.id), decision: decision(null, reason, null, started, "FALLBACK", `Fallback used because ${reason}.`) } }
 }
-
-export async function generateProgramme(request: ProgrammeRequest, env: NodeJS.ProcessEnv): Promise<GeneratedProgramme> {
-  const provider = createAiProvider(env)
-  return provider.generateProgramme(request)
-}
+function unavailable(name: string): ProviderHealth { return { name, model: null, configured: false, available: false, lastError: "not configured", checkedAt: new Date().toISOString() } }
+function normalizeProposal(raw: unknown, request: ProgrammeRequest): unknown { const value = raw as Record<string, unknown>; if (Array.isArray(value?.items)) return raw; const candidates = [value?.playlist, value?.queue, value?.tracks].find(Array.isArray) as unknown[] | undefined; if (!candidates) return raw; return { programmeType: "MUSIC", mood: typeof value.mood === "string" ? value.mood : request.mood, reason: typeof value.reason === "string" ? value.reason : typeof value.summary === "string" ? value.summary : "Provider-selected sequence", items: candidates.map((item, index) => { const entry = item as Record<string, unknown>; return { mediaId: typeof item === "string" ? item : String(entry.mediaId || entry.id || ""), position: index + 1, reason: typeof entry.reason === "string" ? entry.reason : "Provider-selected track" } }) } }
+function decision(result: ProviderResult | null, fallbackReason: string | null, proposal: unknown, started: number, validationStatus: "ACCEPTED" | "FALLBACK" | "REJECTED", explanation: string): AiDecision { return { id: randomUUID(), requestType: "playlist", provider: result?.provider || null, model: result?.model || null, validationStatus, rejectionReason: fallbackReason, explanation, proposal, latencyMs: Date.now() - started, createdAt: new Date().toISOString(), fallbackProvider: fallbackReason ? result?.provider || null : null } as AiDecision }
+function validateProposal(proposal: ValidatedProposal, context: BroadcastContext) { const byId = new Map(context.availableMedia.map((media) => [media.id, media])); const ids = new Set<string>(); const selected: Array<{ media: typeof context.availableMedia[number]; reason: string }> = []; let total = 0; const alternativeArtistExists = context.availableMedia.some((media) => !context.recentArtists.includes(media.artist)); for (const item of [...proposal.items].sort((a, b) => a.position - b.position)) { const media = byId.get(item.mediaId); const duration = media?.durationSeconds || 1; const artistCooling = Boolean(media && context.recentArtists.includes(media.artist) && alternativeArtistExists); if (!media || media.enabled === false || media.programmeEligible === false || ids.has(item.mediaId) || context.recentTrackIds.includes(item.mediaId) || artistCooling || (selected.length > 0 && total + duration > context.request.durationMinutes * 60)) continue; ids.add(item.mediaId); selected.push({ media, reason: item.reason }); total += duration } return selected }
+export function createAiProviderManager(env: NodeJS.ProcessEnv): AiProviderManager { const asiKey = env.ASI_CLOUD_API_KEY2 || env.ASI_CLOUD_API_KEY || ""; const groqKey = env.GROQ_API_KEY || ""; const asiBase = (env.ASI_CLOUD_BASE_URL || "https://llm.c.singularitynet.io/v1").replace(/\/$/, ""); const groqBase = (env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, ""); return new AiProviderManager(asiKey ? new OpenAiCompatibleProvider("ASI Cloud", `${asiBase}/chat/completions`, asiKey, env.ASI_CLOUD_CHAT_MODEL || "asi1-mini") : undefined, groqKey ? new OpenAiCompatibleProvider("Groq", `${groqBase}/chat/completions`, groqKey, env.GROQ_MODEL || "openai/gpt-oss-20b") : undefined) }
+export function contextHash(context: BroadcastContext) { return createHash("sha256").update(JSON.stringify(context)).digest("hex") }
+export async function generateProgramme(request: ProgrammeRequest, _env: NodeJS.ProcessEnv): Promise<GeneratedProgramme> { return generatedProgrammeSchema.parse({ ...request, title: `${request.theme} / deterministic fallback`, tracks: [], introduction: "Deterministic fallback: no production AI provider is configured.", selectionMetadata: { themeRelevance: 0, listenerPreferenceMatch: 0, freshness: 0, overallSelectionScore: 0 }, source: "development-fallback" }) }

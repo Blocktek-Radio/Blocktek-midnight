@@ -33,6 +33,18 @@ export class BroadcastStore {
     return row?.title || null
   }
 
+  async claimNextAiItem(): Promise<BroadcastQueueItem | null> {
+    const [row] = await this.sql<{ media_id: string; title: string; artist: string; album: string | null; path: string; duration_seconds: number | null; artwork_url: string | null; programme_title: string; queue_id: string }[]>`SELECT q.media_asset_id AS media_id, m.title, m.artist, m.album, m.path, m.duration_seconds, m.artwork_url, q.programme_title, q.decision_id || ':' || q.position AS queue_id FROM ai_programming_queue q JOIN media_assets m ON m.id = q.media_asset_id WHERE q.status = 'PENDING' AND m.enabled = true ORDER BY q.created_at, q.position LIMIT 1`
+    if (!row) return null
+    const updated = await this.sql`UPDATE ai_programming_queue SET status = 'PLAYING' WHERE decision_id || ':' || position = ${row.queue_id} AND status = 'PENDING' RETURNING decision_id`
+    if (!updated.length) return this.claimNextAiItem()
+    return { id: row.media_id, title: row.title, artist: row.artist, album: row.album, artworkUrl: row.artwork_url, programme: row.programme_title, startedAt: new Date().toISOString(), source: "music", path: row.path, durationSeconds: row.duration_seconds || undefined }
+  }
+
+  async completeAiItem(item: BroadcastQueueItem) {
+    await this.sql`UPDATE ai_programming_queue SET status = 'PLAYED', played_at = now() WHERE media_asset_id = ${item.id} AND status = 'PLAYING'`
+  }
+
   async stopSession(sessionId: string, error?: string) {
     await this.event(sessionId, "broadcast_stopped", null, error)
     await this.sql`UPDATE broadcast_sessions SET status = 'STOPPED', ended_at = now(), last_error = ${error?.slice(0, 500) || null}, updated_at = now() WHERE id = ${sessionId}`

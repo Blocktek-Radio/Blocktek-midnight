@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status:** Phase 1 is externally operational. The BlockTek Docker stack is continuously broadcasting the supplied real MP3 library through private Icecast, Nginx, and HTTPS. The production API reports real `LIVE` and now-playing state. AI DJ and Midnight remain intentionally unconfigured until Phase 2 and later.
+> **Status:** Phase 1 is externally operational. Phase 2 implementation is present behind an optional provider boundary: ASI Cloud is primary, Groq is fallback, and deterministic programming remains authoritative when AI is unavailable. Midnight remains intentionally unconfigured.
 
 ## Vision and Problem
 
@@ -218,7 +218,11 @@ Add operator-supplied fallback/jingle audio to the currently empty fallback dire
 
 ### Phase 2: AI DJ & Intelligent Programming
 
-Add real provider-backed playlist and programme generation, introductions, recommendation metadata, and explicit fallback behavior. AI must plug into the existing queue boundary and remain optional for basic broadcasting.
+The AI pipeline is `bounded broadcast context -> ASI Cloud -> Groq fallback -> strict JSON/schema validation -> media allowlist/cooldown policy -> PostgreSQL decision and queue -> worker -> FFmpeg -> private Icecast`. Provider keys remain server-side and are never returned by the API. The primary environment names are `ASI_CLOUD_BASE_URL`, `ASI_CLOUD_CHAT_MODEL`, `ASI_CLOUD_API_KEY2`; fallback uses `GROQ_API_KEY` and `GROQ_MODEL`.
+
+Programming modes are `DETERMINISTIC`, `AI_ASSISTED`, and `AI_PROGRAMMED`. All modes retain deterministic eligibility, duplicate, cooldown, duration, and fallback rules. AI generates bounded multi-track windows rather than controlling FFmpeg or executing tools. The `ai_programming_decisions` table stores structured proposal metadata, provider/model, validation status, fallback reason, explanation, context hash, and latency. Accepted items are inserted into `ai_programming_queue`; the BlockTek worker claims those items before deterministic media and marks them played. If both providers fail, the worker continues with the normal catalogue loop.
+
+The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Full Midnight/ZK eligibility and selective disclosure remain Phase 3 work.
 
 ### Phase 3: Midnight Privacy
 
