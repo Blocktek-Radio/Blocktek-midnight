@@ -295,11 +295,51 @@ The deployed AI pipeline is `bounded broadcast context -> ASI Cloud -> Groq fall
 
 Programming modes are `DETERMINISTIC`, `AI_ASSISTED`, and `AI_PROGRAMMED`; production is currently configured as `AI_ASSISTED`. All modes retain deterministic eligibility, duplicate, cooldown, duration, and fallback rules. AI generates bounded multi-track windows rather than controlling FFmpeg or executing tools. The additive migration `0002_ai_programming.sql` creates `ai_programming_decisions` and `ai_programming_queue`. Accepted items are inserted into the durable queue; the BlockTek worker claims those items before deterministic media and marks them played. If both providers fail, the worker continues with the normal catalogue loop.
 
-The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Full Midnight/ZK eligibility and selective disclosure remain Phase 3 work.
+The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Live Midnight/ZK eligibility and selective disclosure remain Phase 3B work.
 
-### Next: Phase 3 Midnight Privacy
+### Completed: Phase 3A — Privacy Lifecycle & Selective Disclosure
 
-Add wallet integration, a Compact eligibility contract, proof creation and verification, contributor credentials, and selective disclosure.
+Phase 3A establishes the server-authoritative privacy layer without making
+Midnight a dependency of radio uptime. Implemented and verified capabilities
+include:
+
+- Durable contributor, contribution, privacy-verification, editorial-review,
+  Midnight transaction, and audit-event records through migration
+  `0003_privacy.sql`.
+- Ordered lifecycle states from `DRAFT` and `SUBMITTED` through privacy
+  verification, editorial review, approval, programming, broadcast, rejection,
+  expiry, and revocation.
+- Canonical SHA-256 content commitments with audio remaining off-chain.
+- Selective-disclosure boundaries that expose eligibility results only; private
+  identity data, wallet secrets, proof inputs, and witnesses are not accepted
+  by the API or sent to AI.
+- A minimal Compact eligibility contract source and a clean Midnight verifier
+  adapter boundary. The contract is not claimed as compiled or deployed, and
+  the live system honestly reports `NOT_CONFIGURED` until real artifacts and
+  network configuration are supplied.
+- Owner/editor authorization boundaries, editorial approval, audit history,
+  approved-metadata handoff to the existing AI programming context, and the
+  `/contribute` and `/midnight` interfaces.
+
+### Pending: Phase 3B — Live Midnight Testnet Integration
+
+Complete the real Midnight integration and production authorization boundary:
+
+- Pin and install the compatible Midnight.js and Compact toolchain, compile the
+  contract, and retain generated artifacts with their source/configuration
+  provenance.
+- Configure a non-custodial wallet flow, testnet network/node/indexer, proof
+  server, ZK artifacts, and deployed contract address.
+- Create and verify real eligibility proofs, record transaction references,
+  support expiry/revocation, and confirm selective-disclosure behavior against
+  the deployed contract.
+- Replace the development/trusted-proxy actor boundary with production
+  authentication and authorization, then enable authenticated contribution
+  intake only after the live verifier and wallet flows pass end-to-end checks.
+
+Radio playback, the existing AI fallback behavior, and the broadcast worker
+must remain operational if Midnight is unavailable. Phase 3B is the next
+pending step; Phase 4 work is intentionally out of scope until it is complete.
 
 ### Phase 4: Whistleblower Workflow
 
