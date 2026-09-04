@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.js",
+  "sourceRoot": "../../../../",
+  "sources": ["contracts/midnight/contributor-eligibility.compact"],
+  "names": [],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAaA;;;;;;;;;;;;;;;;MAcA,AAAA,MAMC;;;;;cANqB,SAAkB;;;;;;;;;;;;;;;;;;yCAAlB,SAAkB;;;;;;;mEAAlB,SAAkB;;;OAMvC;MAED,AAAA,MAGC;;;;;;;;;;;;;;;;;;;;;;OAAA;;;;;;;;;;GAhBA;EATD;;;;;UACE,8BAAuC;UACvC,8BAAuC;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IARzC;;;;;;;;;yEAA+C;IAC/C;;;;;;;;;yEAA+C;IAC/C;;;;;;;;;yEAAmD;IACnD;;;;;;;;;yEAAgC;IAChC;;;;;;;;;yEAA+B;IAM7B;;;;;;;2HAAiC,8BAA4B;;yEAAxC;IACrB;;;;;;;2HAAiC,8BAA4B;;yEAAxC;IACrB;;;;;;;;;yEAAyB;IACzB;;;;;;;;;yEAAQ;IACR;;;;;;;;;yEAAO;;;;;;;GACR;EAED,AAAA,+BAAkD;;0DAAlD,4BAAkD;;;;;;;;;;;;;;GAAA;EAClD,AAAA,+BAAkD;;0DAAlD,4BAAkD;;;;;;;;;;;;;;GAAA;EAElD,AAAA,SAMC,4BANqB,SAAkB;qDAC9B;;;;;;;;;;;0HAAO;;;;kEAC0B;;;;;;;;;;;uIAAqB;;;;kEACrB;;;;;;;;;;;uIAAqB;;IAC9D;;;;;;;2HAAqC,SAAO;;yEAAnB;IACzB;;;;;;;;;yEAAQ;;GACT;EAED,AAAA,SAGC;IAFC;;;;;;;;;yEAAO;IACP;;;;;;;;;yEAAQ;;GACT;;;;;;;;;;;;;;;;;;;;;;;;IA/BD;qCAAA;;;;;;;;;;;0GAA+C;KAAA;IAC/C;qCAAA;;;;;;;;;;;0GAA+C;KAAA;IAC/C;qCAAA;;;;;;;;;;;0GAAmD;KAAA;IACnD;qCAAA;;;;;;;;;;;0GAAgC;KAAA;IAChC;qCAAA;;;;;;;;;;;0GAA+B;KAAA;;;;;;;;;;;;;"
+}

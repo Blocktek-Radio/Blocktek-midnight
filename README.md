@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3 privacy lifecycle, commitments, selective-disclosure records, authorization boundary, Compact source, and honest Midnight status are implemented. Midnight testnet proof verification remains `NOT_CONFIGURED` until the SDK artifacts, verifier/network, wallet integration, and contract deployment are supplied.
+> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3A is complete. Phase 3B has its pinned Compact/Midnight.js toolchain, generated contract/ZK artifacts, preprod wallet bootstrap, simulator coverage, and an isolated loopback proof server; live funding, deployment, proof verification, transaction evidence, and production authentication remain pending. The API therefore continues to report `NOT_CONFIGURED`.
 
 ## Vision and Problem
 
@@ -51,11 +51,13 @@ reference, and metadata. The same canonical input is deterministic; changing
 bound metadata changes the commitment. Audio is never put on-chain.
 
 `contracts/midnight/contributor-eligibility.compact` is the minimal contract
-source. It keeps contributor and eligibility commitments as witness-backed
-inputs and exposes only commitments plus verification/revocation flags. It is
-not claimed as compiled or deployed. The source targets the current documented
-Compact 0.22 / compiler 0.30 compatibility set and should be compiled with
-the pinned official toolchain before generated artifacts are added.
+source. It initializes public contributor and eligibility commitments, checks
+private witness equality during `attest`, exposes only commitments plus
+verification/revocation flags, and keeps audio off-chain. The generated
+artifacts are in `packages/midnight/managed/` and are documented with their
+toolchain provenance. They prove compilation and simulator behavior only; the
+contract is not claimed as deployed and the API remains `NOT_CONFIGURED` until
+live network and verifier evidence exists.
 
 The current adapter boundary supports a separately hosted verifier through
 `MIDNIGHT_VERIFIER_URL`; that service must own Midnight.js providers, proof
@@ -175,6 +177,31 @@ pnpm dev:api
 ```
 
 Open `http://localhost:3000`. The API is available at `http://localhost:4000`. Without a configured public API or stream, the web application deliberately displays `API UNAVAILABLE` or `NOT CONFIGURED`.
+
+### Phase 3B local operator setup
+
+The current Midnight toolchain is installed from the official Compact
+installer. The generated contract artifacts are reproducible with:
+
+```bash
+compact update 0.31.1
+compact compile contracts/midnight/contributor-eligibility.compact packages/midnight/managed
+```
+
+The preprod wallet bootstrap requires Node.js `>=24.11.1` and writes its
+development-only seed to `/etc/blocktek-radio/midnight-wallet.env` with mode
+`0600`; it prints only public address and balance:
+
+```bash
+npx --yes --package node@24.11.1 --package tsx@4.20.5 \
+  tsx packages/midnight/scripts/bootstrap-testnet-wallet.ts
+```
+
+Use the official preprod faucet UI to obtain a real Turnstile response before
+passing `MIDNIGHT_FAUCET_CAPTCHA_TOKEN` to the optional `--faucet` operation.
+The token is transient input and must not be committed or logged. Contract
+deployment and the verifier sidecar remain disabled until the wallet is funded
+and a real deployment transaction is observed.
 
 ## Environment Variables
 
@@ -321,21 +348,42 @@ include:
   approved-metadata handoff to the existing AI programming context, and the
   `/contribute` and `/midnight` interfaces.
 
-### Pending: Phase 3B — Live Midnight Testnet Integration
+### In progress: Phase 3B — Live Midnight Testnet Integration
 
-Complete the real Midnight integration and production authorization boundary:
+Implemented and verified in the repository:
 
-- Pin and install the compatible Midnight.js and Compact toolchain, compile the
-  contract, and retain generated artifacts with their source/configuration
-  provenance.
-- Configure a non-custodial wallet flow, testnet network/node/indexer, proof
-  server, ZK artifacts, and deployed contract address.
-- Create and verify real eligibility proofs, record transaction references,
-  support expiry/revocation, and confirm selective-disclosure behavior against
-  the deployed contract.
-- Replace the development/trusted-proxy actor boundary with production
-  authentication and authorization, then enable authenticated contribution
-  intake only after the live verifier and wallet flows pass end-to-end checks.
+- Official Compact devtool `0.5.2` with compiler `0.31.1`, Compact language
+  `0.23.0`, ledger `8.0.2`, and runtime `0.16.0`; generated JavaScript,
+  declarations, ZKIR, and prover/verifier artifacts are retained under
+  `packages/midnight/managed/`.
+- Midnight.js `4.1.1`, Wallet SDK `1.1.0`, official testkit `4.1.1`, pinned
+  ledger/runtime dependency overrides, and the official Node.js `>=24.11.1`
+  requirement used by the current example ecosystem.
+- A protected preprod wallet bootstrap that stores its seed outside Git with
+  mode `0600`, prints only the public address and balance, and requires a real
+  Turnstile token before attempting the official faucet request.
+- A BlockTek-only proof server pinned to `8.1.0` and bound to loopback; radio
+  services do not depend on it for uptime. Compact simulator tests cover
+  commitment initialization, witness mismatch rejection, attestation, and
+  revocation.
+
+The next pending Phase 3B steps are the live acceptance gates:
+
+- Obtain preprod funds through the official CAPTCHA-protected faucet, then
+  verify a nonzero wallet balance without exposing the seed.
+- Deploy the generated contract with a real transaction, record its public
+  contract address and transaction reference, and wire a separate Node 24
+  Midnight.js verifier/provider service to the existing adapter boundary.
+- Generate and verify a real eligibility proof, exercise invalid-proof
+  rejection and expiry/revocation, record only safe verification references,
+  and prove the contribution-to-editorial-to-AI-to-broadcast flow.
+- Replace the development/trusted-proxy actor boundary with a real production
+  authentication integration before enabling authenticated contribution intake.
+
+The current live blocker is faucet funding: the official preprod endpoint is
+healthy but requires a user-generated Cloudflare Turnstile response. Until
+funding and authentication are supplied, Phase 3B is intentionally partial,
+the API remains `NOT_CONFIGURED`, and Phase 4 remains out of scope.
 
 Radio playback, the existing AI fallback behavior, and the broadcast worker
 must remain operational if Midnight is unavailable. Phase 3B is the next

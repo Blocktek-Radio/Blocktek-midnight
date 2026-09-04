@@ -1,4 +1,4 @@
-pragma language_version 0.22;
+pragma language_version 0.23;
 
 import CompactStandardLibrary;
 
@@ -11,6 +11,17 @@ export ledger approvedContentCommitment: Bytes<32>;
 export ledger verified: Boolean;
 export ledger revoked: Boolean;
 
+constructor(
+  initialContributorCommitment: Bytes<32>,
+  initialEligibilityCommitment: Bytes<32>
+) {
+  contributorCommitment = disclose(initialContributorCommitment);
+  eligibilityCommitment = disclose(initialEligibilityCommitment);
+  approvedContentCommitment = pad(32, "");
+  verified = false;
+  revoked = false;
+}
+
 witness privateContributorCommitment(): Bytes<32>;
 witness privateEligibilityCommitment(): Bytes<32>;
 
@@ -18,7 +29,7 @@ export circuit attest(content: Bytes<32>): [] {
   assert(!revoked, "attestation is revoked");
   assert(privateContributorCommitment() == contributorCommitment, "contributor commitment does not match");
   assert(privateEligibilityCommitment() == eligibilityCommitment, "eligibility commitment does not match");
-  approvedContentCommitment = content;
+  approvedContentCommitment = disclose(content);
   verified = true;
 }
 

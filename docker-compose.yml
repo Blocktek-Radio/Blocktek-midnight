@@ -98,6 +98,14 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.25
+  midnight-proof-server:
+    image: midnightntwrk/proof-server:8.1.0@sha256:801bbc0340e9e96f16735f77b523f23c7459e3359842f7c79c2c53f4e994d531
+    command: ["midnight-proof-server", "--port", "6300"]
+    ports:
+      - "127.0.0.1:${BLOCKTEK_PROOF_SERVER_BIND_PORT:-6300}:6300"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.00
   postgres:
     image: postgres:16-alpine
     environment:

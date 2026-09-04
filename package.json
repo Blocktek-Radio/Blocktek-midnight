@@ -49,7 +49,9 @@
   },
   "pnpm": {
     "overrides": {
-      "hono": "4.12.25"
+      "hono": "4.12.25",
+      "@midnight-ntwrk/ledger-v8": "8.1.0",
+      "@midnight-ntwrk/onchain-runtime-v3": "3.0.0"
     }
   }
 }

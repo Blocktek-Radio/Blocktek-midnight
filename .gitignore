@@ -26,5 +26,8 @@ node_modules
 .next/
 apps/api/dist/
 apps/worker/dist/
+packages/midnight/logs/
+packages/midnight/.midnight/
+packages/midnight/midnight-level-db/
 .DS_Store
 next-env.d.ts
