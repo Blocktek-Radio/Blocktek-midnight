@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto"
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import { firstValueFrom } from "rxjs"
+import { filter, firstValueFrom, tap, timeout } from "rxjs"
 import { getNetworkId, setNetworkId } from "@midnight-ntwrk/midnight-js-network-id"
 import { DustSecretKey, ZswapSecretKeys, unshieldedToken } from "@midnight-ntwrk/midnight-js-protocol/ledger"
 import { FluentWalletBuilder, type EnvironmentConfiguration } from "@midnight-ntwrk/testkit-js"
 import { UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk-address-format"
+import type { FacadeState, UnshieldedKeystore, WalletFacade } from "@midnight-ntwrk/wallet-sdk"
 
 const requiredNode = [24, 11, 1]
 const actualNode = process.versions.node.split(".").map(Number)
@@ -36,17 +37,34 @@ const readSeed = async (): Promise<string | null> => {
   }
 }
 
-type WalletState = {
-  address: UnshieldedAddress
-  balances?: Record<string, bigint>
-}
+const waitForWalletState = async (wallet: WalletFacade): Promise<FacadeState> => firstValueFrom(
+  wallet.state().pipe(
+    tap((state) => {
+      if (process.argv.includes("--verbose")) {
+        const progress = state.dust.progress
+        const applied = progress.appliedId === undefined ? "unknown" : progress.appliedId.toString()
+        const highest = progress.highestTransactionId === undefined ? "unknown" : progress.highestTransactionId.toString()
+        console.error(`wallet_sync dust_applied=${applied} dust_highest=${highest} dust_connected=${progress.isConnected} dust_strict=${progress.isStrictlyComplete()} unshielded_coins=${state.unshielded.availableCoins.length}`)
+      }
+    }),
+    filter((state) => state.unshielded.progress.isStrictlyComplete()),
+    timeout({ first: 180_000 }),
+  ),
+)
 
-type TestWallet = {
-  start: (...args: unknown[]) => Promise<void>
-  stop: () => Promise<void>
-  unshielded: { state: unknown }
-  state: () => { pipe: () => unknown }
-}
+const waitForBalance = async (wallet: WalletFacade): Promise<FacadeState> => firstValueFrom(
+  wallet.state().pipe(
+    filter((state) => state.unshielded.progress.isStrictlyComplete() && (state.unshielded.balances[unshieldedToken().raw] || BigInt(0)) > BigInt(0)),
+    timeout({ first: 180_000 }),
+  ),
+)
+
+const waitForDust = async (wallet: WalletFacade): Promise<bigint> => firstValueFrom(
+  wallet.state().pipe(
+    filter((state) => state.dust.balance(new Date()) > BigInt(0)),
+    timeout({ first: 300_000 }),
+  ),
+).then((state) => state.dust.balance(new Date()))
 
 const main = async (): Promise<void> => {
   const seed = (await readSeed()) || randomBytes(32).toString("hex")
@@ -55,19 +73,25 @@ const main = async (): Promise<void> => {
   await chmod(walletFile, 0o600)
 
   setNetworkId(network)
-  const builder = FluentWalletBuilder.forEnvironment(environment).withSeed(seed)
+  const builder = FluentWalletBuilder.forEnvironment(environment)
+    .withSeed(seed)
+    .withDustOptions({ additionalFeeOverhead: BigInt(1_000), feeBlocksMargin: 5 })
   const buildResult = await builder.buildWithoutStarting()
   const built = buildResult as unknown as {
-    wallet: TestWallet
+    wallet: WalletFacade
     seeds: { shielded: Uint8Array; dust: Uint8Array }
+    keystore: UnshieldedKeystore
   }
   const wallet = built.wallet
 
   try {
     await wallet.start(ZswapSecretKeys.fromSeed(built.seeds.shielded), DustSecretKey.fromSeed(built.seeds.dust))
-    const state = await firstValueFrom(wallet.unshielded.state as never) as WalletState
-    const address = UnshieldedAddress.codec.encode(getNetworkId(), state.address).toString()
-    let balance = state.balances?.[unshieldedToken().raw] || BigInt(0)
+    let state = await waitForWalletState(wallet)
+    if (process.argv.includes("--faucet") && (state.unshielded.balances[unshieldedToken().raw] || BigInt(0)) === BigInt(0)) {
+      state = await waitForBalance(wallet)
+    }
+    const address = UnshieldedAddress.codec.encode(getNetworkId(), state.unshielded.address).toString()
+    let balance = state.unshielded.balances[unshieldedToken().raw] || BigInt(0)
     if (process.argv.includes("--faucet")) {
       const captchaToken = process.env.MIDNIGHT_FAUCET_CAPTCHA_TOKEN
       if (!captchaToken) throw new Error("MIDNIGHT_FAUCET_CAPTCHA_TOKEN is required; obtain it through the official Turnstile faucet UI")
@@ -78,15 +102,33 @@ const main = async (): Promise<void> => {
       })
       const faucetBody = await faucetResponse.json() as { status?: string; message?: string; transactionIdentifier?: string }
       if (!faucetResponse.ok || faucetBody.status === "error") throw new Error(`Official faucet rejected the request: ${faucetBody.message || `HTTP ${faucetResponse.status}`}`)
-      for (let attempt = 0; attempt < 18 && balance === BigInt(0); attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10_000))
-        const current = await firstValueFrom(wallet.state().pipe() as never) as { unshielded?: { balances?: Record<string, bigint> } }
-        balance = current.unshielded?.balances?.[unshieldedToken().raw] || BigInt(0)
+      state = await waitForBalance(wallet)
+      balance = state.unshielded.balances[unshieldedToken().raw] || BigInt(0)
+    }
+    if (process.argv.includes("--generate-dust")) {
+      const unregisteredUtxos = state.unshielded.availableCoins.filter((coin) => !coin.meta.registeredForDustGeneration)
+      if (unregisteredUtxos.length > 0) {
+        const recipe = await wallet.registerNightUtxosForDustGeneration(
+          unregisteredUtxos,
+          built.keystore.getPublicKey(),
+          (payload) => built.keystore.signData(payload),
+          state.dust.address,
+        )
+        const transaction = await wallet.finalizeRecipe(recipe)
+        const txId = await wallet.submitTransaction(transaction)
+        console.log(`dust_registration_tx=${txId}`)
+        const dustBalance = await waitForDust(wallet)
+        console.log(`dust_balance=${dustBalance.toString()}`)
+      } else {
+        console.log("dust_registration=already_registered_or_unavailable")
+        console.log(`dust_balance=${state.dust.balance(new Date()).toString()}`)
       }
     }
     console.log(`network=${network}`)
     console.log(`public_address=${address}`)
     console.log(`unshielded_balance=${balance.toString()}`)
+    console.log(`dust_synced=${state.dust.progress.isStrictlyComplete()}`)
+    console.log(`dust_balance=${state.dust.balance(new Date()).toString()}`)
     console.log(`wallet_file=${walletFile}`)
   } finally {
     await wallet.stop()
@@ -94,6 +136,12 @@ const main = async (): Promise<void> => {
 }
 
 void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "Midnight wallet bootstrap failed")
+  if (error instanceof Error) {
+    console.error(error.stack || error.message)
+    const cause = (error as Error & { cause?: unknown }).cause
+    if (cause) console.error("submission_cause=", cause)
+  } else {
+    console.error("Midnight wallet bootstrap failed")
+  }
   process.exitCode = 1
 })

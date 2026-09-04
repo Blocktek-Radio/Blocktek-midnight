@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3A is complete. Phase 3B has its pinned Compact/Midnight.js toolchain, generated contract/ZK artifacts, preprod wallet bootstrap, simulator coverage, and an isolated loopback proof server; live funding, deployment, proof verification, transaction evidence, and production authentication remain pending. The API therefore continues to report `NOT_CONFIGURED`.
+> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3A is complete. Phase 3B has its pinned Compact/Midnight.js toolchain, generated contract/ZK artifacts, preprod wallet bootstrap, simulator coverage, and an isolated loopback proof server. The dedicated Preprod wallet now shows indexed tNIGHT, but usable tDUST, deployment, proof verification, transaction evidence, and production authentication remain pending. The API therefore continues to report `NOT_CONFIGURED`.
 
 ## Vision and Problem
 
@@ -200,8 +200,10 @@ npx --yes --package node@24.11.1 --package tsx@4.20.5 \
 Use the official preprod faucet UI to obtain a real Turnstile response before
 passing `MIDNIGHT_FAUCET_CAPTCHA_TOKEN` to the optional `--faucet` operation.
 The token is transient input and must not be committed or logged. Contract
-deployment and the verifier sidecar remain disabled until the wallet is funded
-and a real deployment transaction is observed.
+deployment and the verifier sidecar remain disabled until usable tDUST and a
+real deployment transaction are observed. The optional `--generate-dust`
+operation follows the official tNIGHT-to-tDUST registration flow and reports
+the DUST state without printing wallet secrets.
 
 ## Environment Variables
 
@@ -356,7 +358,7 @@ Implemented and verified in the repository:
   `0.23.0`, ledger `8.0.2`, and runtime `0.16.0`; generated JavaScript,
   declarations, ZKIR, and prover/verifier artifacts are retained under
   `packages/midnight/managed/`.
-- Midnight.js `4.1.1`, Wallet SDK `1.1.0`, official testkit `4.1.1`, pinned
+- Midnight.js `4.1.1`, Wallet SDK `1.2.0`, official testkit `4.1.1`, pinned
   ledger/runtime dependency overrides, and the official Node.js `>=24.11.1`
   requirement used by the current example ecosystem.
 - A protected preprod wallet bootstrap that stores its seed outside Git with
@@ -369,8 +371,9 @@ Implemented and verified in the repository:
 
 The next pending Phase 3B steps are the live acceptance gates:
 
-- Obtain preprod funds through the official CAPTCHA-protected faucet, then
-  verify a nonzero wallet balance without exposing the seed.
+- Generate usable tDUST from the verified tNIGHT UTxOs through the official
+  Preprod registration flow, then verify a nonzero DUST balance and a real
+  transaction submission.
 - Deploy the generated contract with a real transaction, record its public
   contract address and transaction reference, and wire a separate Node 24
   Midnight.js verifier/provider service to the existing adapter boundary.
@@ -380,10 +383,13 @@ The next pending Phase 3B steps are the live acceptance gates:
 - Replace the development/trusted-proxy actor boundary with a real production
   authentication integration before enabling authenticated contribution intake.
 
-The current live blocker is faucet funding: the official preprod endpoint is
-healthy but requires a user-generated Cloudflare Turnstile response. Until
-funding and authentication are supplied, Phase 3B is intentionally partial,
-the API remains `NOT_CONFIGURED`, and Phase 4 remains out of scope.
+The current live blocker is usable DUST generation: the wallet sees the
+funded tNIGHT UTxOs, but the current headless registration attempt is rejected
+when the Preprod RPC submission stream closes before inclusion. A manual Lace
+wallet action may be required to select **Tokens → Generate tDUST** for this
+same funded wallet. Until DUST, deployment, proof, and authentication gates
+are supplied, Phase 3B is intentionally partial, the API remains
+`NOT_CONFIGURED`, and Phase 4 remains out of scope.
 
 Radio playback, the existing AI fallback behavior, and the broadcast worker
 must remain operational if Midnight is unavailable. Phase 3B is the next
