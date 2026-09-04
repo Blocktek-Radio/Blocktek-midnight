@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status (verified 2026-09-03):** Phase 1 is live in production and Phase 2 is deployed. The API reports `AI_AVAILABLE` in `AI_ASSISTED` mode with ASI Cloud primary and Groq fallback; deterministic programming remains authoritative when AI is unavailable. Midnight remains intentionally unconfigured.
+> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3 privacy lifecycle, commitments, selective-disclosure records, authorization boundary, Compact source, and honest Midnight status are implemented. Midnight testnet proof verification remains `NOT_CONFIGURED` until the SDK artifacts, verifier/network, wallet integration, and contract deployment are supplied.
 
 ## Vision and Problem
 
@@ -20,15 +20,86 @@ The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repos
 
 Midnight is the privacy boundary for contributor credentials, eligibility assertions, and selective disclosure. The intended result is to prove “verified contributor” or another eligibility property without revealing name, email, location, wallet address, or organisation. Audio, podcasts, stream data, AI processing, and ordinary application data remain off-chain.
 
+## Phase 3 — Private + Verifiable Radio
+
+Phase 3 adds a server-authoritative contribution lifecycle without making
+Midnight a dependency of radio uptime:
+
+```text
+Contributor -> commitment -> real Midnight proof (when configured)
+  -> selective disclosure -> editorial review -> approval
+  -> programmable metadata -> existing AI validator -> queue -> broadcast
+```
+
+The API persists `DRAFT`, `SUBMITTED`, `PRIVACY_VERIFICATION_PENDING`,
+`PRIVACY_VERIFIED`, `EDITORIAL_REVIEW`, `APPROVED`, `PROGRAMMABLE`, and
+`BROADCAST`, plus `REJECTED`, `EXPIRED`, and `REVOKED`. New contributions remain
+pending when Midnight is unavailable; existing radio media and the broadcast
+worker continue independently.
+
+### Privacy model
+
+| Classification | Examples | Stored/exposed by BlockTek |
+| --- | --- | --- |
+| Private | identity, contact details, wallet secrets, proof inputs, witnesses | Not accepted by the contribution API and never sent to AI |
+| Selectively disclosed | eligibility result, category, ownership claim | Only the attributes returned by a verified adapter |
+| Public/editorial | contribution ID, title, description, content type, commitment, lifecycle state | Owner/editor scoped API views; approved metadata may reach AI |
+
+The commitment is SHA-256 over a canonical, recursively key-sorted JSON
+representation of content type, normalized title/description, content
+reference, and metadata. The same canonical input is deterministic; changing
+bound metadata changes the commitment. Audio is never put on-chain.
+
+`contracts/midnight/contributor-eligibility.compact` is the minimal contract
+source. It keeps contributor and eligibility commitments as witness-backed
+inputs and exposes only commitments plus verification/revocation flags. It is
+not claimed as compiled or deployed. The source targets the current documented
+Compact 0.22 / compiler 0.30 compatibility set and should be compiled with
+the pinned official toolchain before generated artifacts are added.
+
+The current adapter boundary supports a separately hosted verifier through
+`MIDNIGHT_VERIFIER_URL`; that service must own Midnight.js providers, proof
+artifacts, wallet approval, and transaction submission. BlockTek does not
+store seed phrases/private keys, sign on behalf of contributors, or accept raw
+witnesses. If this boundary is not configured, `/api/v1/midnight/status` and
+`/midnight` report `NOT_CONFIGURED` and proof requests do not advance state.
+
+### Privacy API
+
+Protected contribution routes are available at `POST/GET /api/v1/contributions`,
+`POST /api/v1/contributions/:id/prove-eligibility`,
+`GET /api/v1/contributions/:id/privacy-status`,
+`POST /api/v1/contributions/:id/editorial-review`, and
+`POST /api/v1/contributions/:id/approve`. `GET /api/v1/midnight/status` exposes
+only aggregate counts and safe adapter state; verification details omit the
+proof reference from contributor responses. Editorial approval requires an
+`EDITOR` or `ADMIN` actor, and contributors can read only their own records.
+
+The checkout has no production authentication provider. Development tests and
+the local demo use explicitly labelled actor headers under
+`BLOCKTEK_AUTH_MODE=development`; production defaults to
+`BLOCKTEK_AUTH_MODE=unconfigured` and returns `503` for private contribution
+operations until the existing trusted authentication/proxy integration is
+connected. These headers are not an identity system.
+
+### AI boundary
+
+AI receives only enabled media and `programmable()` contribution metadata:
+contribution ID, content type, title, description, verified editorial status,
+programming eligibility, and an optional content reference. It never receives
+identity, contact information, wallet material, proof references, or witness
+data. Deterministic validation remains authoritative and Midnight outages do
+not stop the worker or live stream.
+
 ## What Works Today
 
 - `/radio` provides the station, channel, programme, queue, and now-playing product shell.
 - `/radio` includes native audio playback controls with explicit stream-health, error, retry, volume, and API-unavailable states.
 - `/ai-dj` provides a schema-validated programme-generation workflow with a server-side provider boundary.
 - `/ai-dj` reports the live AI status, programming mode, provider metadata, generated programme provenance, and decision explanation without exposing credentials.
-- `/contribute` provides a development-only contribution workflow and editorial state transitions.
-- `/verify` exposes Midnight configuration status and a selective-disclosure policy.
-- The versioned Fastify API exposes health, radio read models, AI programme generation, submissions, and verification status.
+- `/contribute` provides metadata-only contribution intake, commitment generation, and honest proof-request status.
+- `/midnight` exposes verified adapter configuration and aggregate privacy lifecycle counts; `/verify` explains selective disclosure.
+- The versioned Fastify API exposes health, radio read models, AI programme generation, durable contributions, editorial review, and verification status.
 - Shared TypeScript packages contain domain types, Zod validation, radio queue rules, AI adapters, and the Midnight integration boundary.
 - Docker Compose runs isolated web, API, worker, PostgreSQL, Redis, and Icecast services with loopback-only web/API bindings; API startup applies the radio migrations.
 - The worker discovers operator-managed media, applies deterministic queue/programme selection, streams through FFmpeg to private Icecast, persists broadcast sessions/events, and shuts down cleanly.
@@ -75,7 +146,7 @@ The first radio read model is:
 Station -> Channel -> Programme -> Queue -> Now Playing
 ```
 
-Media and streams remain off-chain. AI providers are selected server-side and must return schema-validated data. Midnight is an adapter boundary that cannot verify a proof until a real Compact contract and verifier are configured. Private contributor intake requires authentication, encryption, rate limits, durable storage, access control, retention rules, and metadata minimization before production enablement.
+Media and streams remain off-chain. AI providers are selected server-side and must return schema-validated data. Midnight is an adapter boundary that cannot verify a proof until a real Compact contract and verifier are configured. Private contributor intake requires the production authentication/proxy integration, encryption/retention policy, and rate limits before production enablement. The current durable schema stores commitments/references and status, never raw witnesses or wallet secrets.
 
 ## Structure
 

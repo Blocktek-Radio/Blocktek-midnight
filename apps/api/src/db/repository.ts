@@ -181,8 +181,8 @@ export class PostgresRadioRepository implements RadioRepository {
   }
 
   async getMediaAssets(): Promise<MediaAsset[]> {
-    const rows = await this.db.select().from(schema.mediaAssets).where(eq(schema.mediaAssets.enabled, true)).orderBy(asc(schema.mediaAssets.title))
-    return rows.map((row) => ({ id: row.id, title: row.title, artist: row.artist, album: row.album, path: row.path, kind: row.kind, durationSeconds: row.durationSeconds, artworkUrl: row.artworkUrl, enabled: row.enabled, programmeEligible: true }))
+    const rows = await this.db.select().from(schema.mediaAssets).where(and(eq(schema.mediaAssets.enabled, true), eq(schema.mediaAssets.privacyVerified, true), eq(schema.mediaAssets.editorialApproved, true))).orderBy(asc(schema.mediaAssets.title))
+    return rows.map((row) => ({ id: row.id, title: row.title, artist: row.artist, album: row.album, path: row.path, kind: row.kind, durationSeconds: row.durationSeconds, artworkUrl: row.artworkUrl, enabled: row.enabled, programmeEligible: row.privacyVerified && row.editorialApproved }))
   }
 
   async getProgrammes(): Promise<Programme[]> {

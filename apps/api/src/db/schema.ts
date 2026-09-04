@@ -101,8 +101,53 @@ export const mediaAssets = pgTable("media_assets", {
   durationSeconds: integer("duration_seconds"),
   artworkUrl: text("artwork_url"),
   enabled: boolean("enabled").notNull().default(true),
+  contributionId: text("contribution_id"),
+  privacyVerified: boolean("privacy_verified").notNull().default(true),
+  editorialApproved: boolean("editorial_approved").notNull().default(true),
   ...timestamps,
 }, (table) => ({ kindIdx: index("media_assets_kind_enabled_idx").on(table.kind, table.enabled) }))
+
+export const contributors = pgTable("contributors", {
+  id: text("id").primaryKey(),
+  ...timestamps,
+})
+
+export const contributions = pgTable("contributions", {
+  id: text("id").primaryKey(),
+  contributorId: text("contributor_id").notNull().references(() => contributors.id),
+  contentType: text("content_type").notNull(),
+  contentReference: text("content_reference"),
+  mediaAssetId: text("media_asset_id"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  state: text("state").notNull(),
+  privacyStatus: text("privacy_status").notNull(),
+  editorialStatus: text("editorial_status").notNull(),
+  programmingEligible: boolean("programming_eligible").notNull().default(false),
+  contentCommitment: text("content_commitment").notNull().unique(),
+  ...timestamps,
+})
+
+export const privacyVerifications = pgTable("privacy_verifications", {
+  id: text("id").primaryKey(),
+  contributionId: text("contribution_id").notNull().references(() => contributions.id, { onDelete: "cascade" }),
+  claimType: text("claim_type").notNull(),
+  disclosedAttributes: text("disclosed_attributes").array().notNull().default([]),
+  status: text("status").notNull(),
+  proofReference: text("proof_reference").notNull(),
+  verificationReference: text("verification_reference"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  ...timestamps,
+})
+
+export const editorialReviews = pgTable("editorial_reviews", {
+  id: text("id").primaryKey(),
+  contributionId: text("contribution_id").notNull().references(() => contributions.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  verificationReference: text("verification_reference"),
+  reason: text("reason"),
+  ...timestamps,
+})
 
 export const broadcastSessions = pgTable("broadcast_sessions", {
   id: text("id").primaryKey(),

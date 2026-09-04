@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { label: "AI DJ", href: "/ai-dj" },
   { label: "Contribute", href: "/contribute" },
   { label: "Verify", href: "/verify" },
+  { label: "Midnight", href: "/midnight" },
   { label: "Protocol", href: "/#protocol" },
   { label: "Roadmap", href: "/#roadmap" },
 ]

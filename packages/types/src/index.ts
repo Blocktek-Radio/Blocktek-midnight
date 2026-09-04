@@ -15,6 +15,89 @@ export const submissionStates = [
 export const submissionStateSchema = z.enum(submissionStates)
 export type SubmissionState = z.infer<typeof submissionStateSchema>
 
+export const contributionStates = [
+  "DRAFT",
+  "SUBMITTED",
+  "PRIVACY_VERIFICATION_PENDING",
+  "PRIVACY_VERIFIED",
+  "EDITORIAL_REVIEW",
+  "APPROVED",
+  "PROGRAMMABLE",
+  "BROADCAST",
+  "REJECTED",
+  "EXPIRED",
+  "REVOKED",
+] as const
+export const contributionStateSchema = z.enum(contributionStates)
+export type ContributionState = z.infer<typeof contributionStateSchema>
+
+export const contributionContentTypes = ["AUDIO", "PODCAST", "PROGRAMME", "TEXT"] as const
+export const contributionContentTypeSchema = z.enum(contributionContentTypes)
+export type ContributionContentType = z.infer<typeof contributionContentTypeSchema>
+
+export const privacyVerificationStatuses = ["PENDING", "VERIFIED", "REJECTED", "EXPIRED", "REVOKED"] as const
+export const privacyVerificationStatusSchema = z.enum(privacyVerificationStatuses)
+export type PrivacyVerificationStatus = z.infer<typeof privacyVerificationStatusSchema>
+
+export const editorialStatuses = ["PENDING", "VERIFIED", "REJECTED", "REVOKED"] as const
+export const editorialStatusSchema = z.enum(editorialStatuses)
+export type EditorialStatus = z.infer<typeof editorialStatusSchema>
+
+export type ApprovedContributionMetadata = {
+  contributionId: string
+  contentType: ContributionContentType
+  title: string
+  description: string
+  editorialStatus: "VERIFIED"
+  programmingEligible: true
+  contentReference: string | null
+}
+
+export type Contribution = {
+  id: string
+  contentType: ContributionContentType
+  title: string
+  description: string
+  contentReference: string | null
+  state: ContributionState
+  privacyStatus: PrivacyVerificationStatus
+  editorialStatus: EditorialStatus
+  programmingEligible: boolean
+  contentCommitment: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PrivacyVerification = {
+  id: string
+  contributionId: string
+  claimType: string
+  disclosedAttributes: string[]
+  status: PrivacyVerificationStatus
+  proofReference: string
+  verificationReference: string | null
+  expiresAt: string | null
+  createdAt: string
+}
+
+export type EditorialReview = {
+  id: string
+  contributionId: string
+  status: EditorialStatus
+  verificationReference: string | null
+  reason: string | null
+  createdAt: string
+}
+
+export type ContributionAuditEvent = {
+  id: string
+  contributionId: string
+  event: string
+  actorRole: "SYSTEM" | "CONTRIBUTOR" | "EDITOR" | "ADMIN"
+  reference: string | null
+  createdAt: string
+}
+
 export const programmeRequestSchema = z.object({
   theme: z.string().trim().min(2).max(120),
   mood: z.string().trim().min(2).max(80),
@@ -236,8 +319,15 @@ export type DisclosureResult = {
 }
 
 export type MidnightStatus = {
-  configured: false
-  status: "NOT_CONFIGURED"
+  configured: boolean
+  status: "NOT_CONFIGURED" | "CONFIGURED" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "UNAVAILABLE"
   network: string
+  networkId: string | null
+  walletConfigured: boolean
+  contractConfigured: boolean
+  proofConfigured: boolean
+  connected: boolean
+  contractAddress: string | null
   capabilities: string[]
+  detail: string
 }

@@ -1,0 +1,28 @@
+pragma language_version 0.22;
+
+import CompactStandardLibrary;
+
+// Public state is limited to commitments and lifecycle flags. The witness
+// values are supplied by the contributor's Midnight.js private state and are
+// never written to the ledger.
+export ledger contributorCommitment: Bytes<32>;
+export ledger eligibilityCommitment: Bytes<32>;
+export ledger approvedContentCommitment: Bytes<32>;
+export ledger verified: Boolean;
+export ledger revoked: Boolean;
+
+witness privateContributorCommitment(): Bytes<32>;
+witness privateEligibilityCommitment(): Bytes<32>;
+
+export circuit attest(content: Bytes<32>): [] {
+  assert(!revoked, "attestation is revoked");
+  assert(privateContributorCommitment() == contributorCommitment, "contributor commitment does not match");
+  assert(privateEligibilityCommitment() == eligibilityCommitment, "eligibility commitment does not match");
+  approvedContentCommitment = content;
+  verified = true;
+}
+
+export circuit revoke(): [] {
+  revoked = true;
+  verified = false;
+}
