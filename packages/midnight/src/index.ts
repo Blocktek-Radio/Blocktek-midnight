@@ -79,7 +79,13 @@ export class HttpMidnightAdapter implements MidnightAdapter {
     if (!response.ok) throw new Error(`Midnight verifier returned HTTP ${response.status}`)
     const body = await response.json() as Partial<EligibilityVerification>
     if (body.status !== "VERIFIED" || typeof body.verificationReference !== "string") throw new Error("Midnight verifier did not return a verified result")
-    return { status: "VERIFIED", verificationReference: body.verificationReference, expiresAt: body.expiresAt || request.expiresAt, detail: typeof body.detail === "string" ? body.detail : "Eligibility proof verified by configured Midnight adapter" }
+    const expiresAt = body.expiresAt || request.expiresAt
+    if (expiresAt !== null && expiresAt !== undefined) {
+      const expiry = Date.parse(expiresAt)
+      if (!Number.isFinite(expiry) || expiry <= Date.now()) throw new Error("Midnight verifier returned an expired proof")
+    }
+    if (!body.verificationReference.trim()) throw new Error("Midnight verifier returned an empty verification reference")
+    return { status: "VERIFIED", verificationReference: body.verificationReference, expiresAt: expiresAt || null, detail: typeof body.detail === "string" ? body.detail : "Eligibility proof verified by configured Midnight adapter" }
   }
 }
 

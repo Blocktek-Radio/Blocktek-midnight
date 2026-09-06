@@ -18,6 +18,9 @@ and ZK providers. They do not contain the BlockTek testnet wallet seed. Wallet
 seeds and other signing material remain outside the repository in a protected
 operator-managed file.
 
-Generation proves compilation only. Contract deployment, proof generation,
-verification, and transaction references remain runtime/testnet evidence and
-must not be inferred from these files.
+Generation proves compilation only. Runtime evidence is recorded separately on
+the operator host: the contract was deployed on Preprod at
+`00dbd210a79269590e962745cd19f47e35cf66451390c2c0eee617269d847d58` in block
+`2434918`, and the `attest` circuit was verified by the Preprod indexer in
+block `2435060`. These records are not generated artifacts and are not stored
+in this public directory.

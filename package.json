@@ -13,7 +13,8 @@
     "start": "next start",
     "start:api": "pnpm --filter @blocktek/api start",
     "lint": "eslint .",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "midnight:compile": "compact compile contracts/midnight/contributor-eligibility.compact packages/midnight/managed"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

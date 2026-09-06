@@ -2,7 +2,7 @@
 
 BlockTek Radio is a privacy-preserving, decentralized radio protocol for community programming, independent media, and contributor-led broadcasting. Its product loop is simple: listen, discover, contribute, verify eligibility privately, review editorially, and broadcast.
 
-> **Status (verified 2026-09-04):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3A is complete. Phase 3B has its pinned Compact/Midnight.js toolchain, generated contract/ZK artifacts, preprod wallet bootstrap, simulator coverage, and an isolated loopback proof server. The dedicated Preprod wallet now shows indexed tNIGHT, but usable tDUST, deployment, proof verification, transaction evidence, and production authentication remain pending. The API therefore continues to report `NOT_CONFIGURED`.
+> **Status (verified 2026-09-06):** Phase 1 is live in production and Phase 2 remains deployed. Phase 3A is complete. Phase 3B live Preprod acceptance is complete: the protected wallet generated usable tDUST, the Compact contract was deployed, and its `attest` circuit produced a finalized ZK transaction whose public ledger state was verified through the Preprod indexer. The application adapter remains `NOT_CONFIGURED` until a separately hosted verifier HTTP service and production authentication integration are enabled.
 
 ## Vision and Problem
 
@@ -14,7 +14,7 @@ The project does not make an absolute anonymity claim. Browsers, network infrast
 
 Phase 1B extends the Phase 1 foundation with a private Icecast source boundary, a deterministic FFmpeg worker, persistent broadcast sessions/events, filesystem media management, fallback handling, and real now-playing synchronization. Phase 2 adds deployed AI programming with durable decision and queue records. The production instance is configured at `https://blocktek-radio.duckdns.org`; the Vercel frontend is `https://blockteck-radio.vercel.app/`.
 
-The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. Production AI uses server-side ASI Cloud and Groq credentials; host development without provider credentials uses an explicitly labelled deterministic fallback. `RADIO_STREAM_URL` remains optional and Midnight reports `NOT_CONFIGURED`. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
+The API uses PostgreSQL when `DATABASE_URL` is configured and an in-memory repository for host development. Production AI uses server-side ASI Cloud and Groq credentials; host development without provider credentials uses an explicitly labelled deterministic fallback. `RADIO_STREAM_URL` remains optional. The application reports Midnight as `NOT_CONFIGURED` until its verifier service is reachable; the separate operator acceptance runner does not make that claim on behalf of the API. No proof, transaction, live stream, provider result, or now-playing metadata is fabricated.
 
 ## Why Midnight
 
@@ -63,8 +63,10 @@ The current adapter boundary supports a separately hosted verifier through
 `MIDNIGHT_VERIFIER_URL`; that service must own Midnight.js providers, proof
 artifacts, wallet approval, and transaction submission. BlockTek does not
 store seed phrases/private keys, sign on behalf of contributors, or accept raw
-witnesses. If this boundary is not configured, `/api/v1/midnight/status` and
-`/midnight` report `NOT_CONFIGURED` and proof requests do not advance state.
+witnesses. The operator acceptance runner has verified the live Preprod
+deployment and proof independently; until this HTTP boundary is configured,
+`/api/v1/midnight/status` and `/midnight` still report `NOT_CONFIGURED` and
+API proof requests do not advance state.
 
 ### Privacy API
 
@@ -200,10 +202,26 @@ npx --yes --package node@24.11.1 --package tsx@4.20.5 \
 Use the official preprod faucet UI to obtain a real Turnstile response before
 passing `MIDNIGHT_FAUCET_CAPTCHA_TOKEN` to the optional `--faucet` operation.
 The token is transient input and must not be committed or logged. Contract
-deployment and the verifier sidecar remain disabled until usable tDUST and a
-real deployment transaction are observed. The optional `--generate-dust`
-operation follows the official tNIGHT-to-tDUST registration flow and reports
-the DUST state without printing wallet secrets.
+deployment uses the current wallet SDK WebSocket submission path by default;
+set `MIDNIGHT_RPC_SUBMISSION_MODE=http` only to test the legacy HTTP fallback.
+The optional `--generate-dust` operation follows the official tNIGHT-to-tDUST
+registration flow and reports the DUST state without printing wallet secrets.
+
+After the deployment readiness gate is true, the real deployment and proof
+acceptance commands are:
+
+```bash
+npx --yes --package node@24.11.1 --package tsx@4.20.5 \
+  tsx packages/midnight/scripts/deploy-contributor-eligibility.ts
+
+npx --yes --package node@24.11.1 --package tsx@4.20.5 \
+  tsx packages/midnight/scripts/verify-contributor-eligibility.ts
+```
+
+The operator supplies `MIDNIGHT_STORAGE_PASSWORD` out-of-band. Neither
+command prints it or stores it in Git. The verifier reuses an already
+finalized `attest` result when the public ledger state matches, preventing an
+unnecessary duplicate proof transaction.
 
 ## Environment Variables
 
@@ -324,7 +342,7 @@ The deployed AI pipeline is `bounded broadcast context -> ASI Cloud -> Groq fall
 
 Programming modes are `DETERMINISTIC`, `AI_ASSISTED`, and `AI_PROGRAMMED`; production is currently configured as `AI_ASSISTED`. All modes retain deterministic eligibility, duplicate, cooldown, duration, and fallback rules. AI generates bounded multi-track windows rather than controlling FFmpeg or executing tools. The additive migration `0002_ai_programming.sql` creates `ai_programming_decisions` and `ai_programming_queue`. Accepted items are inserted into the durable queue; the BlockTek worker claims those items before deterministic media and marks them played. If both providers fail, the worker continues with the normal catalogue loop.
 
-The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Live Midnight/ZK eligibility and selective disclosure remain Phase 3B work.
+The `/ai-dj` route reports actual API state and labels fallback/demo output. The API exposes `GET /api/v1/ai/status`, `POST /api/v1/ai/playlist`, `POST /api/v1/ai/programmes`, `GET /api/v1/ai/decisions`, and `GET /api/v1/ai/decisions/:id`. Generated DJ text/TTS is not required for the core broadcast and no fake audio is produced. Live chain acceptance for Midnight/ZK eligibility is complete; the verifier-backed application flow remains Phase 3B work.
 
 ### Completed: Phase 3A — Privacy Lifecycle & Selective Disclosure
 
@@ -343,14 +361,14 @@ include:
   identity data, wallet secrets, proof inputs, and witnesses are not accepted
   by the API or sent to AI.
 - A minimal Compact eligibility contract source and a clean Midnight verifier
-  adapter boundary. The contract is not claimed as compiled or deployed, and
-  the live system honestly reports `NOT_CONFIGURED` until real artifacts and
-  network configuration are supplied.
+  adapter boundary. The contract is compiled and has now been deployed and
+  exercised on Preprod; the live application still reports `NOT_CONFIGURED`
+  until its separate verifier HTTP service is enabled.
 - Owner/editor authorization boundaries, editorial approval, audit history,
   approved-metadata handoff to the existing AI programming context, and the
   `/contribute` and `/midnight` interfaces.
 
-### In progress: Phase 3B — Live Midnight Testnet Integration
+### Phase 3B — Live Midnight Testnet Integration
 
 Implemented and verified in the repository:
 
@@ -358,9 +376,9 @@ Implemented and verified in the repository:
   `0.23.0`, ledger `8.0.2`, and runtime `0.16.0`; generated JavaScript,
   declarations, ZKIR, and prover/verifier artifacts are retained under
   `packages/midnight/managed/`.
-- Midnight.js `4.1.1`, Wallet SDK `1.2.0`, official testkit `4.1.1`, pinned
-  ledger/runtime dependency overrides, and the official Node.js `>=24.11.1`
-  requirement used by the current example ecosystem.
+- Midnight.js `4.1.1`, Wallet SDK `1.2.0`, pinned ledger/runtime dependencies,
+  and the official Node.js `>=24.11.1` requirement used by the current example
+  ecosystem.
 - A protected preprod wallet bootstrap that stores its seed outside Git with
   mode `0600`, prints only the public address and balance, and requires a real
   Turnstile token before attempting the official faucet request.
@@ -369,31 +387,48 @@ Implemented and verified in the repository:
   commitment initialization, witness mismatch rejection, attestation, and
   revocation.
 
-The next pending Phase 3B steps are the live acceptance gates:
+Verified on Preprod on 2026-09-06:
 
-- Generate usable tDUST from the verified tNIGHT UTxOs through the official
-  Preprod registration flow, then verify a nonzero DUST balance and a real
-  transaction submission.
-- Deploy the generated contract with a real transaction, record its public
-  contract address and transaction reference, and wire a separate Node 24
-  Midnight.js verifier/provider service to the existing adapter boundary.
-- Generate and verify a real eligibility proof, exercise invalid-proof
-  rejection and expiry/revocation, record only safe verification references,
-  and prove the contribution-to-editorial-to-AI-to-broadcast flow.
-- Replace the development/trusted-proxy actor boundary with a real production
-  authentication integration before enabling authenticated contribution intake.
+- The deployment readiness gate was true for healthy node/indexer/proof
+  providers, synchronized wallet state, registered tNIGHT UTxOs, synchronized
+  DUST, nonzero usable tDUST, valid artifacts, and encrypted private-state
+  storage.
+- Contract address:
+  `00dbd210a79269590e962745cd19f47e35cf66451390c2c0eee617269d847d58`.
+- Deployment transaction reference:
+  `009d1adb6545e8927cb0af9b3f991560ca62798fdb436b6a622f94b0f5e71e280d`,
+  included at Preprod block `2434918`.
+- The real `attest` circuit generated and submitted a ZK transaction. The
+  Preprod indexer returned `verified=true`, `revoked=false`, and the expected
+  public content commitment for verification transaction
+  `5f60074361afac840f7e3a8781eda1835a1865788ee450ae20502685babad8fb` at
+  block `2435060`.
+- The current Preprod node rejected the legacy HTTP submission fallback with
+  HTTP 403; the supported operator flow therefore uses the Midnight.js wallet
+  WebSocket submission path (`MIDNIGHT_RPC_SUBMISSION_MODE=ws`).
+- Redacted readiness, deployment, and verification records are retained on
+  the operator host under `/etc/blocktek-radio/`; wallet seed, private state,
+  signing keys, and passwords are not committed.
 
-The current live blocker is usable DUST generation: the wallet sees the
-funded tNIGHT UTxOs, but the current headless registration attempt is rejected
-when the Preprod RPC submission stream closes before inclusion. A manual Lace
-wallet action may be required to select **Tokens → Generate tDUST** for this
-same funded wallet. Until DUST, deployment, proof, and authentication gates
-are supplied, Phase 3B is intentionally partial, the API remains
-`NOT_CONFIGURED`, and Phase 4 remains out of scope.
+The remaining Phase 3B application-integration steps are:
 
-Radio playback, the existing AI fallback behavior, and the broadcast worker
-must remain operational if Midnight is unavailable. Phase 3B is the next
-pending step; Phase 4 work is intentionally out of scope until it is complete.
+- Wire a separately hosted Node 24 Midnight.js verifier/provider service to
+  `MIDNIGHT_VERIFIER_URL`; the API must call that service rather than accept
+  wallet seeds, witnesses, or raw proof material.
+- Exercise the API-level invalid-proof, expiry, revocation, ownership, and
+  editorial-transition paths against that real verifier, recording only safe
+  verification references.
+- Complete the production authentication integration and authenticated live
+  contribution-to-editorial-to-AI-to-broadcast checks.
+- Deploy the frontend only after the verifier-backed API is configured; this
+  acceptance update changes no frontend source and does not require a new
+  Vercel deployment.
+
+The live chain acceptance blocker is resolved. Phase 3B remains an application
+integration phase until the verifier service and production authentication are
+enabled. Radio playback, the existing AI fallback behavior, and the broadcast
+worker remain operational if Midnight is unavailable. Phase 4 remains out of
+scope until the remaining Phase 3B application gates are complete.
 
 ### Phase 4: Whistleblower Workflow
 

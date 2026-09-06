@@ -5,6 +5,7 @@ const configSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
   BLOCKTEK_AUTH_MODE: z.enum(["unconfigured", "development", "trusted-proxy"]).default(process.env.NODE_ENV === "production" ? "unconfigured" : "development"),
+  BLOCKTEK_AUTH_SHARED_SECRET: z.string().min(32).optional().or(z.literal("")),
   DATABASE_URL: z.string().url().optional().or(z.literal("")),
   REDIS_URL: z.string().url().optional().or(z.literal("")),
   AI_PROVIDER: z.enum(["development", "openai-compatible", "asi-cloud", "groq"]).default("development"),
